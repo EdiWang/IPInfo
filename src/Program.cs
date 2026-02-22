@@ -87,13 +87,15 @@ app.Use(async (ctx, next) =>
     var db = ctx.RequestServices.GetRequiredService<QqwryDbProvider>();
     if (!db.IsAvailable)
     {
-        ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        var logger = ctx.RequestServices.GetRequiredService<ILogger<Program>>();
+        logger.LogError("IP database not found at '{Path}'. Returning 503. Please check the configuration.", qqwryPath);
+        ctx.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
         ctx.Response.ContentType = "application/problem+json";
         await ctx.Response.WriteAsJsonAsync(new
         {
             type = "https://tools.ietf.org/html/rfc9110#section-15.6.1",
             title = "IP Database Unavailable",
-            status = 500,
+            status = 503,
             detail = $"IP database not found at the configured path '{qqwryPath}'. Please check the configuration and ensure the database file exists."
         });
         return;
