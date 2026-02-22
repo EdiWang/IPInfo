@@ -3,10 +3,16 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text;
 using System.Threading.RateLimiting;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
+var version = typeof(Program).Assembly
+    .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()
+    ?.InformationalVersion ?? "unknown";
+Console.WriteLine($"IPInfo v{version}");
 
 var builder = WebApplication.CreateBuilder(args);
 
