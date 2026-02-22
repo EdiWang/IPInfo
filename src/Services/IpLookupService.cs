@@ -3,7 +3,7 @@ using System.Net;
 
 namespace IPInfo.Services;
 
-public sealed class IpLookupService(QqwryDb db)
+public sealed class IpLookupService(QqwryDbProvider db)
 {
     public IpLocationResult Lookup(IPAddress ip)
     {
