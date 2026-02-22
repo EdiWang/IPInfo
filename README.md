@@ -8,6 +8,7 @@ A lightweight ASP.NET Core minimal API that resolves IPv4 geolocation informatio
 - Supports reverse proxy environments via `X-Forwarded-For` header
 - Built-in rate limiting (per-IP and global)
 - Returns structured JSON responses with [RFC 7807](https://datatracker.ietf.org/doc/html/rfc7807) Problem Details on errors
+- Hot-reloads `qqwry.dat` automatically when the file changes on disk
 - Docker-ready
 
 ## API Endpoints
@@ -17,6 +18,7 @@ A lightweight ASP.NET Core minimal API that resolves IPv4 geolocation informatio
 | GET    | `/`           | Look up the caller's own IP        |
 | GET    | `/ip`         | Look up the caller's own IP        |
 | GET    | `/ip/{ipV4}`  | Look up a specific IPv4 address    |
+| GET    | `/db-info`    | Return database file metadata      |
 
 ### Example Response
 
@@ -26,6 +28,16 @@ A lightweight ASP.NET Core minimal API that resolves IPv4 geolocation informatio
   "country": "美国",
   "area": "",
   "isp": "Google LLC"
+}
+```
+
+### `/db-info` Response
+
+```json
+{
+  "path": "/data/qqwry.dat",
+  "sizeMb": 10.42,
+  "lastUpdatedUtc": "2025-01-01T00:00:00Z"
 }
 ```
 
@@ -61,9 +73,9 @@ When exceeded, the API returns `HTTP 429 Too Many Requests`.
 ```bash
 # Clone the repository
 git clone https://github.com/ediwang/IPInfo.git
-cd IPInfo/src
+cd IPInfo
 
-# Place qqwry.dat in /data/ or configure IpDb:QqwryPath
+# Place qqwry.dat in /data/ or set DBPath in appsettings.json
 dotnet run
 ```
 
