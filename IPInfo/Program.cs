@@ -11,7 +11,7 @@ Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 var builder = WebApplication.CreateBuilder(args);
 
 // ── QQWry.dat ────────────────────────────────────────────────────
-var qqwryPath = builder.Configuration.GetValue<string>("IpDb:QqwryPath") ?? "/data/QQWry.dat";
+var qqwryPath = builder.Configuration.GetValue<string>("IpDb:QqwryPath") ?? "/data/qqwry.dat";
 if (!File.Exists(qqwryPath))
 {
     var logger = LoggerFactory.Create(lb => lb.AddConsole()).CreateLogger("Startup");
