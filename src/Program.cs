@@ -148,4 +148,16 @@ ipGroup.MapGet("/ip/{ipV4}", (string ipV4, HttpContext ctx, IpLookupService svc,
     return Results.Ok(result);
 });
 
+// GET /db-info — return database file metadata
+app.MapGet("/db-info", (QqwryDbProvider db) =>
+{
+    var info = db.GetFileInfo();
+    return Results.Ok(new
+    {
+        path = info.Path,
+        sizeMb = Math.Round(info.SizeBytes / 1024.0 / 1024.0, 2),
+        lastUpdatedUtc = info.LastUpdatedUtc
+    });
+});
+
 app.Run();

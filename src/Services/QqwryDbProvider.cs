@@ -23,6 +23,16 @@ public sealed class QqwryDbProvider
 
     public IpLocation Query(IPAddress ip) => _current.Query(ip);
 
+    public DbFileInfo GetFileInfo()
+    {
+        var fi = new FileInfo(_path);
+        return new DbFileInfo(
+            Path: _path,
+            SizeBytes: fi.Exists ? fi.Length : 0,
+            LastUpdatedUtc: _lastWriteTime
+        );
+    }
+
     internal void TryReload()
     {
         var newWriteTime = File.GetLastWriteTimeUtc(_path);
@@ -43,3 +53,5 @@ public sealed class QqwryDbProvider
         _logger.LogInformation("QQWry database reloaded from {Path} ({Size:N0} bytes)", _path, fileSize);
     }
 }
+
+public record DbFileInfo(string Path, long SizeBytes, DateTime LastUpdatedUtc);
