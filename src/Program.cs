@@ -19,11 +19,9 @@ if (!File.Exists(qqwryPath))
     return;
 }
 
-var reloadInterval = TimeSpan.FromSeconds(
-    builder.Configuration.GetValue("IpDb:ReloadIntervalSeconds", 60));
-
 builder.Services.AddSingleton(sp =>
-    new QqwryDbProvider(qqwryPath, reloadInterval, sp.GetRequiredService<ILogger<QqwryDbProvider>>()));
+    new QqwryDbProvider(qqwryPath, sp.GetRequiredService<ILogger<QqwryDbProvider>>()));
+builder.Services.AddHostedService<QqwryDbWatcher>();
 builder.Services.AddSingleton<IpLookupService>();
 
 // ── Forwarded Headers ────────────────────────────────────────────
