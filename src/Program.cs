@@ -18,12 +18,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 // ── QQWry.dat ────────────────────────────────────────────────────
 var qqwryPath = builder.Configuration.GetValue<string>("DBPath") ?? "/data/qqwry.dat";
-if (!File.Exists(qqwryPath))
-{
-    var logger = LoggerFactory.Create(lb => lb.AddConsole()).CreateLogger("Startup");
-    logger.LogCritical("QQWry.dat not found at {Path}. Exiting.", qqwryPath);
-    return;
-}
 
 builder.Services.AddSingleton(sp =>
     new QqwryDbProvider(qqwryPath, sp.GetRequiredService<ILogger<QqwryDbProvider>>()));
@@ -86,6 +80,26 @@ var app = builder.Build();
 
 app.UseForwardedHeaders();
 app.UseRateLimiter();
+
+// ── DB availability gate ─────────────────────────────────────────
+app.Use(async (ctx, next) =>
+{
+    var db = ctx.RequestServices.GetRequiredService<QqwryDbProvider>();
+    if (!db.IsAvailable)
+    {
+        ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        ctx.Response.ContentType = "application/problem+json";
+        await ctx.Response.WriteAsJsonAsync(new
+        {
+            type = "https://tools.ietf.org/html/rfc9110#section-15.6.1",
+            title = "IP Database Unavailable",
+            status = 500,
+            detail = $"IP database not found at the configured path '{qqwryPath}'. Please check the configuration and ensure the database file exists."
+        });
+        return;
+    }
+    await next(ctx);
+});
 
 // ── Helper: resolve client IPv4 from X-Forwarded-For (leftmost) ─
 static IPAddress? ResolveClientIpV4(HttpContext ctx)
