@@ -16,6 +16,12 @@ Console.WriteLine($"IPInfo v{version}");
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Logging.AddSimpleConsole(options =>
+{
+    options.SingleLine = true;
+    options.TimestampFormat = "yyyy-MM-dd HH:mm:ss ";
+});
+
 // ── QQWry.dat ────────────────────────────────────────────────────
 var qqwryPath = builder.Configuration.GetValue<string>("DBPath") ?? "/data/qqwry.dat";
 
