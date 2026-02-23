@@ -152,8 +152,9 @@ static IResult HandleSelfLookup(HttpContext ctx, IpLookupService svc, ILogger<Pr
     }
 
     var result = svc.Lookup(clientIp);
-    logger.LogInformation("Lookup {ClientIp} -> {QueryIp}: {Country} {Area} {Isp}",
-        clientIp, result.QueryIp, result.Country, result.Area, result.Isp);
+    var ua = ctx.Request.Headers.UserAgent.ToString();
+    logger.LogInformation("Lookup {ClientIp} -> {QueryIp}: {Country} {Area} {Isp} | UA: {UserAgent}",
+        clientIp, result.QueryIp, result.Country, result.Area, result.Isp, ua);
     return Results.Ok(result);
 }
 
@@ -171,8 +172,9 @@ ipGroup.MapGet("/ip/{ipV4}", (string ipV4, HttpContext ctx, IpLookupService svc,
     }
 
     var result = svc.Lookup(ip);
-    logger.LogInformation("Lookup {ClientIp} -> {QueryIp}: {Country} {Area} {Isp}",
-        clientIp, result.QueryIp, result.Country, result.Area, result.Isp);
+    var ua = ctx.Request.Headers.UserAgent.ToString();
+    logger.LogInformation("Lookup {ClientIp} -> {QueryIp}: {Country} {Area} {Isp} | UA: {UserAgent}",
+        clientIp, result.QueryIp, result.Country, result.Area, result.Isp, ua);
     return Results.Ok(result);
 });
 
