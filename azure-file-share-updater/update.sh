@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 固定下载地址（也允许用环境变量覆盖）
+# Fixed download URL (can also be overridden via environment variable)
 QQWRY_URL="${QQWRY_URL:-https://github.com/metowolf/qqwry.dat/releases/latest/download/qqwry.dat}"
 
 DATA_DIR="${DATA_DIR:-/data}"
@@ -22,7 +22,7 @@ sha256_file() {
   sha256sum "$1" | awk '{print $1}'
 }
 
-# 加锁避免并发写坏
+# Use a lock to prevent concurrent writes from corrupting the file
 exec 200>"$LOCK_FILE"
 flock -n 200 || { log "Another update is running, exit."; exit 0; }
 
@@ -30,7 +30,7 @@ log "Downloading: $QQWRY_URL"
 RAW="$TMP_DIR/qqwry.dat"
 curl -fsSL --retry 5 --retry-delay 2 -A "$USER_AGENT" "$QQWRY_URL" -o "$RAW"
 
-# 基本校验：非空、大小合理（纯真库一般远大于 100KB）
+# Basic validation: non-empty and reasonable size (qqwry database is generally much larger than 100KB)
 SIZE=$(stat -c%s "$RAW" 2>/dev/null || stat -f%z "$RAW")
 if [[ "$SIZE" -lt 102400 ]]; then
   log "ERROR: downloaded file too small ($SIZE bytes), abort."
@@ -40,7 +40,7 @@ fi
 NEW_SHA="$(sha256_file "$RAW")"
 log "New sha256=$NEW_SHA size=$SIZE"
 
-# 如果现有文件存在且 hash 相同，则不替换
+# If the existing file exists and has the same hash, skip replacement
 if [[ -f "$TARGET_PATH" ]]; then
   OLD_SHA="$(sha256_file "$TARGET_PATH" || true)"
   if [[ "$OLD_SHA" == "$NEW_SHA" ]]; then
@@ -52,7 +52,7 @@ if [[ -f "$TARGET_PATH" ]]; then
   fi
 fi
 
-# 原子替换（先写临时文件再 mv）
+# Atomic replacement (write to a temp file first, then mv)
 TMP_TARGET="$DATA_DIR/.${TARGET_NAME}.tmp"
 cp -f "$RAW" "$TMP_TARGET"
 sync || true
