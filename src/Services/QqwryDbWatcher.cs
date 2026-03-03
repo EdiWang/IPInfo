@@ -1,17 +1,11 @@
 namespace IPInfo.Services;
 
-public sealed class QqwryDbWatcher : BackgroundService
+public sealed class QqwryDbWatcher(
+    QqwryDbProvider provider,
+    IConfiguration configuration,
+    ILogger<QqwryDbWatcher> logger) : BackgroundService
 {
-    private readonly QqwryDbProvider _provider;
-    private readonly TimeSpan _interval;
-    private readonly ILogger<QqwryDbWatcher> _logger;
-
-    public QqwryDbWatcher(QqwryDbProvider provider, IConfiguration configuration, ILogger<QqwryDbWatcher> logger)
-    {
-        _provider = provider;
-        _logger = logger;
-        _interval = TimeSpan.FromSeconds(configuration.GetValue("IpDb:ReloadIntervalSeconds", 60));
-    }
+    private readonly TimeSpan _interval = TimeSpan.FromSeconds(configuration.GetValue("IpDb:ReloadIntervalSeconds", 60));
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -20,11 +14,11 @@ public sealed class QqwryDbWatcher : BackgroundService
         {
             try
             {
-                _provider.TryReload();
+                provider.TryReload();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to reload QQWry database.");
+                logger.LogError(ex, "Failed to reload QQWry database.");
             }
         }
     }
