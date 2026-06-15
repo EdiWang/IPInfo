@@ -1,0 +1,77 @@
+name: ip-info
+
+services:
+  ipinfo:
+    image: ediwang.azurecr.io/ipinfo:latest
+    container_name: ipinfo
+    restart: unless-stopped
+    ports:
+      - "8000:8080"
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      DBPath: /data/qqwry.dat
+    volumes:
+      - type: bind
+        source: /opt/docker/ip-info
+        target: /data
+        read_only: true
+
+  ipinfo-updater:
+    image: ediwang.azurecr.io/ipinfo-updater:latest
+    container_name: ipinfo-updater
+    restart: unless-stopped
+    environment:
+      DATA_DIR: /data
+      TARGET_NAME: qqwry.dat
+      SCHEDULE_TIME: "03:00"
+    volumes:
+      - type: bind
+        source: /opt/docker/ip-info
+        target: /data
+      # Follow the VM's local timezone so "03:00" means 03:00 on the host.
+      - type: bind
+        source: /etc/localtime
+        target: /etc/localtime
+        read_only: true
+    entrypoint:
+      - /bin/bash
+      - -lc
+    command:
+      - |
+        set -euo pipefail
+
+        log() {
+          echo "[$$(date -Is)] $$*"
+        }
+
+        run_update() {
+          log "Running IP database update..."
+          if /app/update.sh; then
+            log "IP database update finished."
+          else
+            rc="$$?"
+            log "IP database update failed with exit code $${rc}."
+            return "$${rc}"
+          fi
+        }
+
+        if [ ! -s "/data/qqwry.dat" ]; then
+          log "/data/qqwry.dat not found; running initial update."
+          run_update || true
+        fi
+
+        while true; do
+          now="$$(date +%s)"
+          target_today="$$(date -d "$$(date +%F) $${SCHEDULE_TIME}:00" +%s)"
+
+          if [ "$${target_today}" -le "$${now}" ]; then
+            next_run="$$(date -d "tomorrow $${SCHEDULE_TIME}:00" +%s)"
+          else
+            next_run="$${target_today}"
+          fi
+
+          sleep_seconds="$$((next_run - now))"
+          log "Next update at $$(date -d "@$${next_run}" -Is); sleeping $${sleep_seconds}s."
+          sleep "$${sleep_seconds}"
+          run_update || true
+        done
