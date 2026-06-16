@@ -116,6 +116,43 @@ public sealed class IpInfoEndpointTests
     }
 
     [Fact]
+    public async Task HealthChecks_ReturnHealthy_WhenDatabaseIsAvailable()
+    {
+        using var file = TestQqwryDatabase.WriteTempFile(
+            TestQqwryDatabase.CreateNormalDb("United States", "Google LLC", padToProviderMinimum: true));
+        using var factory = CreateFactory(file.Path);
+        using var client = factory.CreateClient();
+
+        using var live = await client.GetAsync(
+            "/health/live",
+            TestContext.Current.CancellationToken);
+        using var ready = await client.GetAsync(
+            "/health/ready",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, live.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, ready.StatusCode);
+    }
+
+    [Fact]
+    public async Task HealthChecks_KeepLivenessSeparateFromDatabaseReadiness()
+    {
+        var missingPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{Guid.NewGuid():N}.dat");
+        using var factory = CreateFactory(missingPath);
+        using var client = factory.CreateClient();
+
+        using var live = await client.GetAsync(
+            "/health/live",
+            TestContext.Current.CancellationToken);
+        using var ready = await client.GetAsync(
+            "/health/ready",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, live.StatusCode);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, ready.StatusCode);
+    }
+
+    [Fact]
     public async Task RateLimiting_UsesLeftmostXForwardedForAddressAsPartitionKey()
     {
         using var file = TestQqwryDatabase.WriteTempFile(

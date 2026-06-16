@@ -14,6 +14,9 @@ Core behaviors:
 - `GET /` and `GET /ip` resolve the caller's IPv4 address.
 - `GET /ip/{ipV4}` resolves a specific IPv4 address.
 - `GET /db-info` returns metadata for the configured database file.
+- `GET /health/live` reports process liveness.
+- `GET /health/ready` reports readiness and requires the QQWry database to be
+  available.
 - The API supports reverse proxy scenarios with `X-Forwarded-For`.
 - The API has both global and per-client-IP fixed-window rate limits.
 - The QQWry database is loaded from disk and hot-reloaded by a hosted service.
@@ -40,6 +43,8 @@ Core behaviors:
   configuration.
 - `src/Services/DbAvailabilityLogState.cs` prevents repeated per-request error
   logs while the database is unavailable.
+- `src/Services/QqwryDbHealthCheck.cs` implements the readiness dependency
+  check for the QQWry database.
 - `src/Models/IpLocationResult.cs` is the public response DTO.
 - `azure-file-share-updater/` contains a small Docker image/script for
   downloading and atomically replacing `qqwry.dat`.
@@ -120,6 +125,10 @@ Database reload polling can be configured with:
 - The database availability middleware returns `503` when `qqwry.dat` is absent
   or unavailable. Do not let missing database files become unhandled exceptions
   for normal API requests.
+- Health endpoints must bypass the database availability middleware so
+  `/health/live` and `/health/ready` can report their own health status.
+- Docker and deployment readiness checks should use `/health/ready`, not
+  `/health/live`.
 - `/db-info` is public, but must not expose the full configured database path.
   It should still return `503` when the database is unavailable.
 - Invalid `IpDb:ReloadIntervalSeconds` values should fall back to the default
@@ -139,6 +148,7 @@ Database reload polling can be configured with:
 - `compose.yaml` expects `/opt/docker/ip-info` on the host and mounts it to
   `/data`.
 - The API container reads `/data/qqwry.dat` as read-only.
+- The API container healthcheck calls `http://127.0.0.1:8080/health/ready`.
 - The updater container writes `/data/qqwry.dat` and companion metadata files
   such as `.sha256`, `.version`, and `.updated_at`.
 - Do not commit real database files, generated deployment data, or registry

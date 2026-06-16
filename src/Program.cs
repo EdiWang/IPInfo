@@ -1,4 +1,5 @@
 using IPInfo.Services;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Net;
@@ -31,6 +32,9 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddHostedService<QqwryDbWatcher>();
 builder.Services.AddSingleton<IpLookupService>();
 builder.Services.AddSingleton<DbAvailabilityLogState>();
+builder.Services.AddHealthChecks()
+    .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: ["live"])
+    .AddCheck<QqwryDbHealthCheck>("qqwry-db", tags: ["ready"]);
 
 // ── Forwarded Headers ────────────────────────────────────────────
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -92,6 +96,12 @@ app.UseRateLimiter();
 // ── DB availability gate ─────────────────────────────────────────
 app.Use(async (ctx, next) =>
 {
+    if (ctx.Request.Path.StartsWithSegments("/health"))
+    {
+        await next(ctx);
+        return;
+    }
+
     var db = ctx.RequestServices.GetRequiredService<QqwryDbProvider>();
     if (!db.IsAvailable)
     {
@@ -116,6 +126,16 @@ app.Use(async (ctx, next) =>
 
     ctx.RequestServices.GetRequiredService<DbAvailabilityLogState>().MarkAvailable();
     await next(ctx);
+});
+
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("live")
+});
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("ready")
 });
 
 // ── Endpoints ────────────────────────────────────────────────────

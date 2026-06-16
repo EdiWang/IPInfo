@@ -56,6 +56,23 @@ fi
 echo "Starting IPInfo stack..."
 docker compose up -d
 
+echo "Waiting for IPInfo readiness..."
+for attempt in $(seq 1 30); do
+  if docker compose exec -T ipinfo curl -fsS http://127.0.0.1:8080/health/ready >/dev/null; then
+    echo "IPInfo readiness check passed."
+    break
+  fi
+
+  if [ "${attempt}" -eq 30 ]; then
+    echo "ERROR: IPInfo readiness check failed after ${attempt} attempts." >&2
+    docker compose ps >&2
+    docker compose logs --tail=100 ipinfo >&2
+    exit 1
+  fi
+
+  sleep 2
+done
+
 echo
 docker compose ps
 echo
