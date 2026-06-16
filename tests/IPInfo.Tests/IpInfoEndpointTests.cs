@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc.Testing;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Xunit;
 
 namespace IPInfo.Tests;
@@ -70,6 +71,44 @@ public sealed class IpInfoEndpointTests
 
         var response = await client.GetAsync(
             "/ip/1.1.1.8",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task DbInfo_ReturnsPublicMetadataWithoutFullPath_WhenDatabaseIsAvailable()
+    {
+        using var file = TestQqwryDatabase.WriteTempFile(
+            TestQqwryDatabase.CreateNormalDb("United States", "Google LLC", padToProviderMinimum: true));
+        using var factory = CreateFactory(file.Path);
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync(
+            "/db-info",
+            TestContext.Current.CancellationToken);
+        using var document = await JsonDocument.ParseAsync(
+            await response.Content.ReadAsStreamAsync(TestContext.Current.CancellationToken),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        var root = document.RootElement;
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(System.IO.Path.GetFileName(file.Path), root.GetProperty("fileName").GetString());
+        Assert.True(root.TryGetProperty("sizeMb", out _));
+        Assert.True(root.TryGetProperty("lastUpdatedUtc", out _));
+        Assert.False(root.TryGetProperty("path", out _));
+    }
+
+    [Fact]
+    public async Task DbInfo_ReturnsServiceUnavailable_WhenDatabaseIsMissing()
+    {
+        var missingPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{Guid.NewGuid():N}.dat");
+        using var factory = CreateFactory(missingPath);
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync(
+            "/db-info",
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);

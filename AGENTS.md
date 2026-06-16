@@ -36,6 +36,10 @@ Core behaviors:
   model.
 - `src/Services/ClientIpResolver.cs` centralizes caller IPv4 resolution for
   endpoint handlers, logging, and rate-limiting partition keys.
+- `src/Services/IpDbReloadOptions.cs` validates database reload interval
+  configuration.
+- `src/Services/DbAvailabilityLogState.cs` prevents repeated per-request error
+  logs while the database is unavailable.
 - `src/Models/IpLocationResult.cs` is the public response DTO.
 - `azure-file-share-updater/` contains a small Docker image/script for
   downloading and atomically replacing `qqwry.dat`.
@@ -116,6 +120,10 @@ Database reload polling can be configured with:
 - The database availability middleware returns `503` when `qqwry.dat` is absent
   or unavailable. Do not let missing database files become unhandled exceptions
   for normal API requests.
+- `/db-info` is public, but must not expose the full configured database path.
+  It should still return `503` when the database is unavailable.
+- Invalid `IpDb:ReloadIntervalSeconds` values should fall back to the default
+  interval and log a warning instead of breaking the hosted service.
 - `QqwryDbProvider` rejects suspiciously small files to avoid reading partially
   written databases. Keep this protection when changing reload behavior.
 - The updater writes to a temp file and uses `mv` for atomic replacement. Keep

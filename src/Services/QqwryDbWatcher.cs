@@ -5,7 +5,7 @@ public sealed class QqwryDbWatcher(
     IConfiguration configuration,
     ILogger<QqwryDbWatcher> logger) : BackgroundService
 {
-    private readonly TimeSpan _interval = TimeSpan.FromSeconds(configuration.GetValue("IpDb:ReloadIntervalSeconds", 60));
+    private readonly TimeSpan _interval = IpDbReloadOptions.GetReloadInterval(configuration, logger);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

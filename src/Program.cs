@@ -30,6 +30,7 @@ builder.Services.AddSingleton(sp =>
     new QqwryDbProvider(qqwryPath, sp.GetRequiredService<ILogger<QqwryDbProvider>>()));
 builder.Services.AddHostedService<QqwryDbWatcher>();
 builder.Services.AddSingleton<IpLookupService>();
+builder.Services.AddSingleton<DbAvailabilityLogState>();
 
 // ── Forwarded Headers ────────────────────────────────────────────
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -94,8 +95,13 @@ app.Use(async (ctx, next) =>
     var db = ctx.RequestServices.GetRequiredService<QqwryDbProvider>();
     if (!db.IsAvailable)
     {
-        var logger = ctx.RequestServices.GetRequiredService<ILogger<Program>>();
-        logger.LogError("IP database not found at '{Path}'. Returning 503. Please check the configuration.", qqwryPath);
+        var logState = ctx.RequestServices.GetRequiredService<DbAvailabilityLogState>();
+        if (logState.TryMarkUnavailable())
+        {
+            var logger = ctx.RequestServices.GetRequiredService<ILogger<Program>>();
+            logger.LogError("IP database not found at '{Path}'. Returning 503. Please check the configuration.", qqwryPath);
+        }
+
         ctx.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
         ctx.Response.ContentType = "application/problem+json";
         await JsonSerializer.SerializeAsync(ctx.Response.Body, new
@@ -107,6 +113,8 @@ app.Use(async (ctx, next) =>
         }, cancellationToken: ctx.RequestAborted);
         return;
     }
+
+    ctx.RequestServices.GetRequiredService<DbAvailabilityLogState>().MarkAvailable();
     await next(ctx);
 });
 
@@ -163,7 +171,7 @@ app.MapGet("/db-info", (QqwryDbProvider db) =>
     var info = db.GetFileInfo();
     return Results.Ok(new
     {
-        path = info.Path,
+        fileName = Path.GetFileName(info.Path),
         sizeMb = Math.Round(info.SizeBytes / 1024.0 / 1024.0, 2),
         lastUpdatedUtc = info.LastUpdatedUtc
     });
