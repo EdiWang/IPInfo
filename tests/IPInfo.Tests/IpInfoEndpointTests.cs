@@ -76,16 +76,40 @@ public sealed class IpInfoEndpointTests
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
     }
 
-    private static WebApplicationFactory<Program> CreateFactory(string dbPath)
+    [Fact]
+    public async Task RateLimiting_UsesLeftmostXForwardedForAddressAsPartitionKey()
+    {
+        using var file = TestQqwryDatabase.WriteTempFile(
+            TestQqwryDatabase.CreateNormalDb("United States", "Google LLC", padToProviderMinimum: true));
+        using var factory = CreateFactory(file.Path, perIpPerSecond: 1);
+        using var client = factory.CreateClient();
+
+        var first = await SendLookupWithXForwardedFor(client, "1.1.1.8, 10.0.0.1");
+        var secondSameClient = await SendLookupWithXForwardedFor(client, "1.1.1.8, 10.0.0.2");
+        var thirdDifferentClient = await SendLookupWithXForwardedFor(client, "1.1.1.9, 10.0.0.1");
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, secondSameClient.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, thirdDifferentClient.StatusCode);
+    }
+
+    private static WebApplicationFactory<Program> CreateFactory(string dbPath, int perIpPerSecond = 1000)
     {
         return new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
                 builder.UseSetting("DBPath", dbPath);
-                builder.UseSetting("RateLimiting:PerIpPerSecond", "1000");
+                builder.UseSetting("RateLimiting:PerIpPerSecond", perIpPerSecond.ToString());
                 builder.UseSetting("RateLimiting:GlobalPerSecond", "1000");
                 builder.UseSetting("IpDb:ReloadIntervalSeconds", "3600");
             });
+    }
+
+    private static Task<HttpResponseMessage> SendLookupWithXForwardedFor(HttpClient client, string xForwardedFor)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/ip/1.1.1.8");
+        request.Headers.TryAddWithoutValidation("X-Forwarded-For", xForwardedFor);
+        return client.SendAsync(request, TestContext.Current.CancellationToken);
     }
 
     private sealed class IpLocationResponse

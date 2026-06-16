@@ -252,6 +252,7 @@
 - 2026-06-16：开始执行 Task 1。已统一 `QqwryDbProvider` 启动加载和热重载的文件状态检查、小文件保护和加载失败处理；尚未运行 build/test。
 - 2026-06-16：完成 Task 2。已为 `QqwryDb` 增加读取边界检查、索引范围校验、未终止字符串处理和 location redirect 深度限制；新增 xUnit v3 测试项目 `tests/IPInfo.Tests`，使用人工构造的小型 QQWry fixture 覆盖正常解析、短 header、越界 index、越界 record offset、循环 redirect、未终止字符串。验证已通过：`dotnet test tests\IPInfo.Tests\IPInfo.Tests.csproj --verbosity normal`、`dotnet build src\IPInfo.csproj`、`dotnet test src\IPInfo.slnx --verbosity minimal`。
 - 2026-06-16：完成 Task 3。测试网扩展为 14 个 xUnit v3 测试，覆盖 `QqwryDb` 解析边界、`QqwryDbProvider` 缺失/小文件/有效文件/小文件热重载保护、Minimal API 正常查询、X-Forwarded-For 自查 IP、非法 IPv4、数据库缺失 503。为集成测试新增 `Microsoft.AspNetCore.Mvc.Testing` 和 `public partial class Program;` 测试入口；修正 503 分支响应 Content-Type 为 `application/problem+json`。验证已通过：`dotnet test src\IPInfo.slnx --verbosity minimal`、`dotnet build src\IPInfo.csproj`、`dotnet test tests\IPInfo.Tests\IPInfo.Tests.csproj --verbosity minimal`。
+- 2026-06-16：完成 Task 4。新增 `ClientIpResolver`，将 endpoint handler、lookup 日志和 per-IP rate limiter 分区统一到同一套 IPv4 解析逻辑；保留 `X-Forwarded-For` 左侧第一个 IPv4 优先、非法 XFF fallback remote IP、IPv4-mapped IPv6 映射语义。测试网扩展为 19 个 xUnit v3 测试，新增 resolver 单测和 per-IP 限流按左侧 XFF 分区的集成测试。
 
 ### 后续执行注意事项
 

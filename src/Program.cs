@@ -70,7 +70,7 @@ builder.Services.AddRateLimiter(options =>
     // Per-IP fixed-window limiter
     options.AddPolicy("per-ip", context =>
     {
-        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var ip = ClientIpResolver.ResolveClientIpV4(context)?.ToString() ?? "unknown";
         return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = perIpPerSecond,
@@ -110,28 +110,6 @@ app.Use(async (ctx, next) =>
     await next(ctx);
 });
 
-// ── Helper: resolve client IPv4 from X-Forwarded-For (leftmost) ─
-static IPAddress? ResolveClientIpV4(HttpContext ctx)
-{
-    // Try X-Forwarded-For header first (leftmost = original client)
-    var xff = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-    if (!string.IsNullOrEmpty(xff))
-    {
-        var leftmost = xff.Split(',', StringSplitOptions.TrimEntries)[0];
-        if (IPAddress.TryParse(leftmost, out var parsed) && parsed.AddressFamily == AddressFamily.InterNetwork)
-            return parsed;
-    }
-
-    var remote = ctx.Connection.RemoteIpAddress;
-    if (remote is null) return null;
-
-    // Handle IPv4-mapped IPv6 addresses (::ffff:x.x.x.x)
-    if (remote.IsIPv4MappedToIPv6)
-        remote = remote.MapToIPv4();
-
-    return remote.AddressFamily == AddressFamily.InterNetwork ? remote : null;
-}
-
 // ── Endpoints ────────────────────────────────────────────────────
 var ipGroup = app.MapGroup("/")
     .RequireRateLimiting("global")
@@ -143,7 +121,7 @@ ipGroup.Map("/ip", HandleSelfLookup);
 
 static IResult HandleSelfLookup(HttpContext ctx, IpLookupService svc, ILogger<Program> logger)
 {
-    var clientIp = ResolveClientIpV4(ctx);
+    var clientIp = ClientIpResolver.ResolveClientIpV4(ctx);
     if (clientIp is null)
     {
         logger.LogInformation("Lookup {ClientIp} -> self: unable to resolve IPv4", "N/A");
@@ -162,7 +140,7 @@ static IResult HandleSelfLookup(HttpContext ctx, IpLookupService svc, ILogger<Pr
 // GET /ip/{ipV4} — lookup a specific IP
 ipGroup.MapGet("/ip/{ipV4}", (string ipV4, HttpContext ctx, IpLookupService svc, ILogger<Program> logger) =>
 {
-    var clientIp = ResolveClientIpV4(ctx)?.ToString() ?? "unknown";
+    var clientIp = ClientIpResolver.ResolveClientIpV4(ctx)?.ToString() ?? "unknown";
 
     if (!IPAddress.TryParse(ipV4, out var ip) || ip.AddressFamily != AddressFamily.InterNetwork)
     {

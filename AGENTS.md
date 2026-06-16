@@ -34,6 +34,8 @@ Core behaviors:
   database changes.
 - `src/Services/IpLookupService.cs` maps database results into the public API
   model.
+- `src/Services/ClientIpResolver.cs` centralizes caller IPv4 resolution for
+  endpoint handlers, logging, and rate-limiting partition keys.
 - `src/Models/IpLocationResult.cs` is the public response DTO.
 - `azure-file-share-updater/` contains a small Docker image/script for
   downloading and atomically replacing `qqwry.dat`.
@@ -109,6 +111,8 @@ Database reload polling can be configured with:
   deployments. Revisit this only with deployment context.
 - `X-Forwarded-For` handling uses the leftmost value as the original client.
   Preserve this behavior unless changing proxy trust semantics deliberately.
+- Keep client IP resolution centralized in `ClientIpResolver`; do not duplicate
+  X-Forwarded-For parsing in `Program.cs` or endpoint handlers.
 - The database availability middleware returns `503` when `qqwry.dat` is absent
   or unavailable. Do not let missing database files become unhandled exceptions
   for normal API requests.
