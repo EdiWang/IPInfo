@@ -4,6 +4,13 @@ namespace IPInfo.Services;
 
 public sealed class QqwryDbProvider
 {
+    private enum DbFileState
+    {
+        Exists,
+        Missing,
+        Unreadable
+    }
+
     private volatile QqwryDb? _current;
     private readonly string _path;
     private DateTime _lastWriteTime;
@@ -19,19 +26,7 @@ public sealed class QqwryDbProvider
     {
         _path = path;
         _logger = logger;
-        _lastWriteTime = File.GetLastWriteTimeUtc(path);
-
-        if (File.Exists(path))
-        {
-            _current = new QqwryDb(path);
-        }
-        else
-        {
-            _current = null;
-            _logger.LogWarning(
-                "QQWry database not found at {Path}. IP lookup will be unavailable until the file is provided.",
-                path);
-        }
+        TryLoad(initialLoad: true);
     }
 
     public IpLocation Query(IPAddress ip)
@@ -53,22 +48,48 @@ public sealed class QqwryDbProvider
 
     internal void TryReload()
     {
-        var newWriteTime = File.GetLastWriteTimeUtc(_path);
-
-        if (!File.Exists(_path))
+        var fileState = GetFileState(out var fileInfo);
+        if (fileState == DbFileState.Missing)
         {
             if (_current is not null)
             {
                 _logger.LogWarning("QQWry database at {Path} was removed. IP lookup will be unavailable.", _path);
                 _current = null;
-                _lastWriteTime = newWriteTime;
+                _lastWriteTime = DateTime.MinValue;
             }
             return;
         }
 
-        if (_current is not null && newWriteTime == _lastWriteTime) return;
+        if (fileState == DbFileState.Unreadable) return;
 
-        var fileSize = new FileInfo(_path).Length;
+        if (fileInfo is null) return;
+        if (_current is not null && fileInfo.LastWriteTimeUtc == _lastWriteTime) return;
+
+        TryLoad(initialLoad: false);
+    }
+
+    private void TryLoad(bool initialLoad)
+    {
+        var fileState = GetFileState(out var fileInfo);
+        if (fileState == DbFileState.Missing)
+        {
+            _current = null;
+            _lastWriteTime = DateTime.MinValue;
+            if (initialLoad)
+            {
+                _logger.LogWarning(
+                    "QQWry database not found at {Path}. IP lookup will be unavailable until the file is provided.",
+                    _path);
+            }
+            return;
+        }
+
+        if (fileState == DbFileState.Unreadable) return;
+
+        if (fileInfo is null) return;
+        var fileSize = fileInfo.Length;
+        var lastWriteTime = fileInfo.LastWriteTimeUtc;
+
         if (fileSize < MinValidFileSizeBytes)
         {
             _logger.LogWarning(
@@ -77,10 +98,49 @@ public sealed class QqwryDbProvider
             return; // _lastWriteTime not updated → will retry next poll
         }
 
-        var newDb = new QqwryDb(_path);
-        Interlocked.Exchange(ref _current, newDb);
-        _lastWriteTime = newWriteTime;
-        _logger.LogInformation("QQWry database reloaded from {Path} ({Size:N0} bytes)", _path, fileSize);
+        try
+        {
+            var newDb = new QqwryDb(_path);
+            Interlocked.Exchange(ref _current, newDb);
+            _lastWriteTime = lastWriteTime;
+
+            if (!initialLoad)
+            {
+                _logger.LogInformation("QQWry database reloaded from {Path} ({Size:N0} bytes)", _path, fileSize);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to load QQWry database from {Path}. Keeping the current database state.",
+                _path);
+        }
+    }
+
+    private DbFileState GetFileState(out FileInfo? fileInfo)
+    {
+        try
+        {
+            fileInfo = new FileInfo(_path);
+            if (!fileInfo.Exists)
+            {
+                return DbFileState.Missing;
+            }
+
+            _ = fileInfo.Length;
+            _ = fileInfo.LastWriteTimeUtc;
+            return DbFileState.Exists;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            fileInfo = null;
+            _logger.LogWarning(
+                ex,
+                "Unable to read QQWry database metadata at {Path}. IP lookup will keep the current database state.",
+                _path);
+            return DbFileState.Unreadable;
+        }
     }
 }
 

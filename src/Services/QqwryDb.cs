@@ -8,6 +8,10 @@ public sealed record IpLocation(string Country, string Area);
 
 public sealed class QqwryDb
 {
+    private const int HeaderLength = 8;
+    private const int IndexRecordLength = 7;
+    private const int MaxRedirectDepth = 8;
+
     private readonly byte[] _data;
     private readonly long _indexStart;
     private readonly long _indexEnd;
@@ -19,8 +23,22 @@ public sealed class QqwryDb
         _enc = Encoding.GetEncoding(936);
         _data = File.ReadAllBytes(path);
 
-        _indexStart = ReadUInt32LE(0);
-        _indexEnd = ReadUInt32LE(4);
+        if (!TryReadUInt32LE(0, out var indexStart) || !TryReadUInt32LE(4, out var indexEnd))
+        {
+            throw new InvalidDataException("QQWry database header is incomplete.");
+        }
+
+        _indexStart = indexStart;
+        _indexEnd = indexEnd;
+
+        if (_data.Length < HeaderLength ||
+            _indexStart > _indexEnd ||
+            (_indexEnd - _indexStart) % IndexRecordLength != 0 ||
+            !HasBytes(_indexStart, IndexRecordLength) ||
+            !HasBytes(_indexEnd, IndexRecordLength))
+        {
+            throw new InvalidDataException("QQWry database index range is invalid.");
+        }
     }
 
     public IpLocation Query(IPAddress ip)
@@ -35,50 +53,63 @@ public sealed class QqwryDb
             return new IpLocation(string.Empty, string.Empty);
 
         long pos = index + 4; // skip startIP (4 bytes)
-        uint recordOffset = ReadUInt24LE(pos);
+        if (!TryReadUInt24LE(pos, out var recordOffset))
+            return new IpLocation(string.Empty, string.Empty);
 
         // skip endIP (4 bytes) at recordOffset
         long recordPos = recordOffset + 4;
 
-        var (country, area) = ReadLocationStrings(recordPos);
+        var (country, area) = ReadLocationStrings(recordPos, depth: 0);
         country = Normalize(country);
         area = Normalize(area);
         return new IpLocation(country, area);
     }
 
-    private (string country, string area) ReadLocationStrings(long pos)
+    private (string country, string area) ReadLocationStrings(long pos, int depth)
     {
-        byte mode = _data[pos];
+        if (depth > MaxRedirectDepth || !TryReadByte(pos, out var mode))
+            return (string.Empty, string.Empty);
 
         if (mode == 0x01)
         {
-            uint p = ReadUInt24LE(pos + 1);
-            return ReadLocationStrings(p);
+            if (!TryReadUInt24LE(pos + 1, out var p) || p == 0)
+                return (string.Empty, string.Empty);
+
+            return ReadLocationStrings(p, depth + 1);
         }
 
         if (mode == 0x02)
         {
-            uint countryOffset = ReadUInt24LE(pos + 1);
+            if (!TryReadUInt24LE(pos + 1, out var countryOffset))
+                return (string.Empty, string.Empty);
+
             string country = ReadCStringAt(countryOffset);
 
             long areaPos = pos + 4; // 1(mode) + 3(offset)
-            string area = ReadAreaString(areaPos);
+            string area = ReadAreaString(areaPos, depth);
             return (country, area);
         }
 
         // normal: country string then area string
         string countryStr = ReadCStringAt(pos);
-        long nextPos = pos + GetCStringByteLength(pos) + 1; // +1 for null terminator
-        string areaStr = ReadAreaString(nextPos);
+        if (!TryGetCStringByteLength(pos, out var countryByteLength))
+            return (countryStr, string.Empty);
+
+        long nextPos = pos + countryByteLength + 1; // +1 for null terminator
+        string areaStr = ReadAreaString(nextPos, depth);
         return (countryStr, areaStr);
     }
 
-    private string ReadAreaString(long pos)
+    private string ReadAreaString(long pos, int depth)
     {
-        byte mode = _data[pos];
+        if (depth > MaxRedirectDepth || !TryReadByte(pos, out var mode))
+            return string.Empty;
+
         if (mode is 0x01 or 0x02)
         {
-            uint p = ReadUInt24LE(pos + 1);
+            if (!TryReadUInt24LE(pos + 1, out var p))
+                return string.Empty;
+
             if (p == 0) return string.Empty;
             return ReadCStringAt(p);
         }
@@ -96,9 +127,12 @@ public sealed class QqwryDb
             long mid = (left + right) / 2;
             long pos = _indexStart + mid * 7;
 
-            uint startIp = ReadUInt32LE(pos);
-            uint recordOffset = ReadUInt24LE(pos + 4);
-            uint endIp = ReadUInt32LE(recordOffset);
+            if (!TryReadUInt32LE(pos, out var startIp) ||
+                !TryReadUInt24LE(pos + 4, out var recordOffset) ||
+                !TryReadUInt32LE(recordOffset, out var endIp))
+            {
+                return -1;
+            }
 
             if (ipNum < startIp)
                 right = mid - 1;
@@ -113,6 +147,19 @@ public sealed class QqwryDb
 
     private string ReadCStringAt(long offset)
     {
+        if (!TryGetCStringByteLength(offset, out var length))
+            return string.Empty;
+
+        if (length == 0) return string.Empty;
+        return _enc.GetString(_data, (int)offset, length);
+    }
+
+    private bool TryGetCStringByteLength(long offset, out int length)
+    {
+        length = 0;
+        if (!HasBytes(offset, 1))
+            return false;
+
         int start = (int)offset;
         int end = start;
         while (end < _data.Length && _data[end] != 0)
@@ -120,30 +167,48 @@ public sealed class QqwryDb
             end++;
         }
 
-        if (end == start) return string.Empty;
-        return _enc.GetString(_data, start, end - start);
+        if (end >= _data.Length)
+            return false;
+
+        length = end - start;
+        return true;
     }
 
-    private int GetCStringByteLength(long offset)
+    private bool TryReadByte(long pos, out byte value)
     {
-        int start = (int)offset;
-        int end = start;
-        while (end < _data.Length && _data[end] != 0)
-        {
-            end++;
-        }
+        value = 0;
+        if (!HasBytes(pos, 1))
+            return false;
 
-        return end - start;
+        value = _data[(int)pos];
+        return true;
     }
 
-    private uint ReadUInt24LE(long pos)
+    private bool TryReadUInt24LE(long pos, out uint value)
     {
-        return (uint)(_data[pos] | (_data[pos + 1] << 8) | (_data[pos + 2] << 16));
+        value = 0;
+        if (!HasBytes(pos, 3))
+            return false;
+
+        var index = (int)pos;
+        value = (uint)(_data[index] | (_data[index + 1] << 8) | (_data[index + 2] << 16));
+        return true;
     }
 
-    private uint ReadUInt32LE(long pos)
+    private bool TryReadUInt32LE(long pos, out uint value)
     {
-        return (uint)(_data[pos] | (_data[pos + 1] << 8) | (_data[pos + 2] << 16) | (_data[pos + 3] << 24));
+        value = 0;
+        if (!HasBytes(pos, 4))
+            return false;
+
+        var index = (int)pos;
+        value = (uint)(_data[index] | (_data[index + 1] << 8) | (_data[index + 2] << 16) | (_data[index + 3] << 24));
+        return true;
+    }
+
+    private bool HasBytes(long offset, int count)
+    {
+        return offset >= 0 && count >= 0 && offset <= _data.Length - count;
     }
 
     private static uint IpToUInt32(IPAddress ip)

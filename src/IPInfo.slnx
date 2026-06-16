@@ -5,4 +5,5 @@
     <File Path="../README.md" />
   </Folder>
   <Project Path="IPInfo.csproj" />
+  <Project Path="../tests/IPInfo.Tests/IPInfo.Tests.csproj" />
 </Solution>
