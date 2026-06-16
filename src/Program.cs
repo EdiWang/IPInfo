@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 using System.Threading.RateLimiting;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -97,13 +98,13 @@ app.Use(async (ctx, next) =>
         logger.LogError("IP database not found at '{Path}'. Returning 503. Please check the configuration.", qqwryPath);
         ctx.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
         ctx.Response.ContentType = "application/problem+json";
-        await ctx.Response.WriteAsJsonAsync(new
+        await JsonSerializer.SerializeAsync(ctx.Response.Body, new
         {
             type = "https://tools.ietf.org/html/rfc9110#section-15.6.1",
             title = "IP Database Unavailable",
             status = 503,
             detail = $"IP database not found at the configured path '{qqwryPath}'. Please check the configuration and ensure the database file exists."
-        });
+        }, cancellationToken: ctx.RequestAborted);
         return;
     }
     await next(ctx);
@@ -191,3 +192,5 @@ app.MapGet("/db-info", (QqwryDbProvider db) =>
 });
 
 app.Run();
+
+public partial class Program;

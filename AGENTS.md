@@ -22,7 +22,7 @@ Core behaviors:
 ## Repository Layout
 
 - `src/` contains the ASP.NET Core application.
-- `tests/IPInfo.Tests/` contains xUnit v3 tests.
+- `tests/IPInfo.Tests/` contains xUnit v3 unit and integration tests.
 - `src/Program.cs` owns host setup, DI, middleware, rate limiting, forwarded
   headers, and endpoint mapping.
 - `src/Services/QqwryDb.cs` parses the QQWry binary database. Treat this code
@@ -148,6 +148,10 @@ dotnet test tests\IPInfo.Tests\IPInfo.Tests.csproj
 
 Tests should use small generated fixtures and must not commit real `qqwry.dat`
 files.
+
+Endpoint tests use `WebApplicationFactory<Program>` with generated fixture
+databases. Keep `public partial class Program;` available for this integration
+test entry point.
 
 When endpoint behavior changes, verify manually with a real or fixture
 `qqwry.dat`:
