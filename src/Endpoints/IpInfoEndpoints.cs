@@ -1,0 +1,71 @@
+using IPInfo.Services;
+using System.Net;
+using System.Net.Sockets;
+
+namespace IPInfo.Endpoints;
+
+public static class IpInfoEndpoints
+{
+    public static void MapIpInfoEndpoints(this WebApplication app)
+    {
+        var ipGroup = app.MapGroup("/")
+            .RequireRateLimiting("global")
+            .RequireRateLimiting("per-ip");
+
+        ipGroup.Map("/", HandleSelfLookup);
+        ipGroup.Map("/ip", HandleSelfLookup);
+        ipGroup.MapGet("/ip/{ipV4}", HandleSpecificLookup);
+
+        app.MapGet("/db-info", (QqwryDbProvider db) =>
+        {
+            var info = db.GetFileInfo();
+            return Results.Ok(new
+            {
+                fileName = Path.GetFileName(info.Path),
+                sizeMb = Math.Round(info.SizeBytes / 1024.0 / 1024.0, 2),
+                lastUpdatedUtc = info.LastUpdatedUtc
+            });
+        });
+    }
+
+    private static IResult HandleSelfLookup(HttpContext ctx, IpLookupService svc, ILogger<Program> logger)
+    {
+        var clientIp = ClientIpResolver.ResolveClientIpV4(ctx);
+        if (clientIp is null)
+        {
+            logger.LogInformation("Lookup {ClientIp} -> self: unable to resolve IPv4", "N/A");
+            return Results.Problem(
+                detail: "Unable to resolve client IPv4 address.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var result = svc.Lookup(clientIp);
+        var ua = ctx.Request.Headers.UserAgent.ToString();
+        logger.LogInformation("Lookup {ClientIp} -> {QueryIp}: {Country} {Area} {Isp} | UA: {UserAgent}",
+            clientIp, result.QueryIp, result.Country, result.Area, result.Isp, ua);
+        return Results.Ok(result);
+    }
+
+    private static IResult HandleSpecificLookup(
+        string ipV4,
+        HttpContext ctx,
+        IpLookupService svc,
+        ILogger<Program> logger)
+    {
+        var clientIp = ClientIpResolver.ResolveClientIpV4(ctx)?.ToString() ?? "unknown";
+
+        if (!IPAddress.TryParse(ipV4, out var ip) || ip.AddressFamily != AddressFamily.InterNetwork)
+        {
+            logger.LogInformation("Lookup {ClientIp} -> {QueryIp}: invalid IPv4", clientIp, ipV4);
+            return Results.Problem(
+                detail: $"'{ipV4}' is not a valid IPv4 address.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var result = svc.Lookup(ip);
+        var ua = ctx.Request.Headers.UserAgent.ToString();
+        logger.LogInformation("Lookup {ClientIp} -> {QueryIp}: {Country} {Area} {Isp} | UA: {UserAgent}",
+            clientIp, result.QueryIp, result.Country, result.Area, result.Isp, ua);
+        return Results.Ok(result);
+    }
+}

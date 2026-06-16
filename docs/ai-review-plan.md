@@ -255,6 +255,8 @@
 - 2026-06-16：完成 Task 4。新增 `ClientIpResolver`，将 endpoint handler、lookup 日志和 per-IP rate limiter 分区统一到同一套 IPv4 解析逻辑；保留 `X-Forwarded-For` 左侧第一个 IPv4 优先、非法 XFF fallback remote IP、IPv4-mapped IPv6 映射语义。测试网扩展为 19 个 xUnit v3 测试，新增 resolver 单测和 per-IP 限流按左侧 XFF 分区的集成测试。
 - 2026-06-16：完成 Task 5 和 Task 6。新增 `IpDbReloadOptions` 校验 `IpDb:ReloadIntervalSeconds`，0/负数回退默认 60 秒并记录 warning；新增 `DbAvailabilityLogState`，数据库不可用期间只在进入 unavailable 状态时记录一次 Error，恢复可用后重置；`/db-info` 仍公开且数据库缺失时返回 503，可用时返回 `fileName`、`sizeMb`、`lastUpdatedUtc`，不再暴露完整 path。测试网扩展为 25 个 xUnit v3 测试，覆盖配置回退、日志状态、`/db-info` 可用/缺失行为。
 - 2026-06-16：完成 Task 7。新增 `/health/live` 和 `/health/ready`，健康端点绕过 DB availability middleware；readiness 通过 `QqwryDbHealthCheck` 要求 DB 可用，compose healthcheck 和 `deploy-vm.sh` 部署后验证均使用 `/health/ready`；API Docker 镜像安装 `curl` 供容器内 healthcheck 使用。
+- 2026-06-16：按用户要求跳过 Task 8 和 Task 9，暂不处理镜像不可变标签和 updater latest 下载完整性增强。
+- 2026-06-16：完成 Task 10 和 Task 11。`Program.cs` 小步整理为高层启动/管线文件，新增 `IpInfoEndpoints`、`QqwryDbAvailabilityMiddlewareExtensions` 和 `ProblemDetailsResponse`，统一中间件层 Problem Details 写入；README 补充配置、健康检查、本地运行、Docker Compose、VM 部署、测试和运维说明；updater README 补充配置、原子写入和 metadata 文件说明。
 
 ### 后续执行注意事项
 

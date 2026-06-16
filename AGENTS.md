@@ -27,7 +27,12 @@ Core behaviors:
 - `src/` contains the ASP.NET Core application.
 - `tests/IPInfo.Tests/` contains xUnit v3 unit and integration tests.
 - `src/Program.cs` owns host setup, DI, middleware, rate limiting, forwarded
-  headers, and endpoint mapping.
+  headers, and high-level pipeline/endpoint mapping calls.
+- `src/Endpoints/IpInfoEndpoints.cs` maps the public API endpoints and keeps
+  endpoint handlers thin.
+- `src/Middleware/QqwryDbAvailabilityMiddlewareExtensions.cs` gates normal API
+  requests when the database is unavailable while allowing health endpoints to
+  report their own status.
 - `src/Services/QqwryDb.cs` parses the QQWry binary database. Treat this code
   carefully: it uses little-endian numeric reads, 24-bit offsets, and CP936
   string decoding.
@@ -45,6 +50,8 @@ Core behaviors:
   logs while the database is unavailable.
 - `src/Services/QqwryDbHealthCheck.cs` implements the readiness dependency
   check for the QQWry database.
+- `src/Services/ProblemDetailsResponse.cs` writes consistent
+  `application/problem+json` responses for middleware-level failures.
 - `src/Models/IpLocationResult.cs` is the public response DTO.
 - `azure-file-share-updater/` contains a small Docker image/script for
   downloading and atomically replacing `qqwry.dat`.
@@ -101,6 +108,8 @@ Database reload polling can be configured with:
   services.
 - Keep `Program.cs` readable. If endpoint or registration logic grows, extract
   cohesive extension methods rather than mixing unrelated concerns inline.
+- Keep endpoint mapping in `IpInfoEndpoints` unless a new feature has a clear
+  separate boundary.
 - Preserve the current public endpoint paths and JSON contract unless the user
   asks for a breaking change.
 - `IpLocationResult.Area` is currently returned as an empty string, while the
@@ -208,6 +217,8 @@ docker build -f azure-file-share-updater\Dockerfile azure-file-share-updater
   already used.
 - Prefer structured logging with message templates over string interpolation.
 - Prefer `Results.Problem` or Problem Details-compatible JSON for API errors.
+- For middleware-level Problem Details responses, prefer
+  `ProblemDetailsResponse.WriteAsync` so the content type stays consistent.
 - Prefer built-in ASP.NET Core features over new dependencies.
 - Keep comments useful and short. The existing code uses comments to mark major
   sections and explain non-obvious binary/database safeguards.

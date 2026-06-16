@@ -166,6 +166,7 @@ public sealed class IpInfoEndpointTests
 
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         Assert.Equal(HttpStatusCode.TooManyRequests, secondSameClient.StatusCode);
+        Assert.Equal("application/problem+json", secondSameClient.Content.Headers.ContentType?.MediaType);
         Assert.Equal(HttpStatusCode.OK, thirdDifferentClient.StatusCode);
     }
 

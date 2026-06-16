@@ -1,12 +1,11 @@
+using IPInfo.Endpoints;
+using IPInfo.Middleware;
 using IPInfo.Services;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
-using System.Net;
-using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
-using System.Text.Json;
 using System.Threading.RateLimiting;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -54,14 +53,13 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.OnRejected = async (context, cancellationToken) =>
     {
-        context.HttpContext.Response.ContentType = "application/problem+json";
-        await context.HttpContext.Response.WriteAsJsonAsync(new
-        {
-            type = "https://tools.ietf.org/html/rfc6585#section-4",
-            title = "Too Many Requests",
-            status = 429,
-            detail = "Rate limit exceeded. Please try again later."
-        }, cancellationToken);
+        await ProblemDetailsResponse.WriteAsync(
+            context.HttpContext,
+            StatusCodes.Status429TooManyRequests,
+            "https://tools.ietf.org/html/rfc6585#section-4",
+            "Too Many Requests",
+            "Rate limit exceeded. Please try again later.",
+            cancellationToken);
     };
 
     // Global fixed-window limiter
@@ -92,41 +90,7 @@ var app = builder.Build();
 
 app.UseForwardedHeaders();
 app.UseRateLimiter();
-
-// ── DB availability gate ─────────────────────────────────────────
-app.Use(async (ctx, next) =>
-{
-    if (ctx.Request.Path.StartsWithSegments("/health"))
-    {
-        await next(ctx);
-        return;
-    }
-
-    var db = ctx.RequestServices.GetRequiredService<QqwryDbProvider>();
-    if (!db.IsAvailable)
-    {
-        var logState = ctx.RequestServices.GetRequiredService<DbAvailabilityLogState>();
-        if (logState.TryMarkUnavailable())
-        {
-            var logger = ctx.RequestServices.GetRequiredService<ILogger<Program>>();
-            logger.LogError("IP database not found at '{Path}'. Returning 503. Please check the configuration.", qqwryPath);
-        }
-
-        ctx.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-        ctx.Response.ContentType = "application/problem+json";
-        await JsonSerializer.SerializeAsync(ctx.Response.Body, new
-        {
-            type = "https://tools.ietf.org/html/rfc9110#section-15.6.1",
-            title = "IP Database Unavailable",
-            status = 503,
-            detail = $"IP database not found at the configured path '{qqwryPath}'. Please check the configuration and ensure the database file exists."
-        }, cancellationToken: ctx.RequestAborted);
-        return;
-    }
-
-    ctx.RequestServices.GetRequiredService<DbAvailabilityLogState>().MarkAvailable();
-    await next(ctx);
-});
+app.UseQqwryDbAvailabilityGate(qqwryPath);
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {
@@ -138,64 +102,7 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
     Predicate = registration => registration.Tags.Contains("ready")
 });
 
-// ── Endpoints ────────────────────────────────────────────────────
-var ipGroup = app.MapGroup("/")
-    .RequireRateLimiting("global")
-    .RequireRateLimiting("per-ip");
-
-// GET / or GET /ip — lookup caller's own IP
-ipGroup.Map("/", HandleSelfLookup);
-ipGroup.Map("/ip", HandleSelfLookup);
-
-static IResult HandleSelfLookup(HttpContext ctx, IpLookupService svc, ILogger<Program> logger)
-{
-    var clientIp = ClientIpResolver.ResolveClientIpV4(ctx);
-    if (clientIp is null)
-    {
-        logger.LogInformation("Lookup {ClientIp} -> self: unable to resolve IPv4", "N/A");
-        return Results.Problem(
-            detail: "Unable to resolve client IPv4 address.",
-            statusCode: StatusCodes.Status400BadRequest);
-    }
-
-    var result = svc.Lookup(clientIp);
-    var ua = ctx.Request.Headers.UserAgent.ToString();
-    logger.LogInformation("Lookup {ClientIp} -> {QueryIp}: {Country} {Area} {Isp} | UA: {UserAgent}",
-        clientIp, result.QueryIp, result.Country, result.Area, result.Isp, ua);
-    return Results.Ok(result);
-}
-
-// GET /ip/{ipV4} — lookup a specific IP
-ipGroup.MapGet("/ip/{ipV4}", (string ipV4, HttpContext ctx, IpLookupService svc, ILogger<Program> logger) =>
-{
-    var clientIp = ClientIpResolver.ResolveClientIpV4(ctx)?.ToString() ?? "unknown";
-
-    if (!IPAddress.TryParse(ipV4, out var ip) || ip.AddressFamily != AddressFamily.InterNetwork)
-    {
-        logger.LogInformation("Lookup {ClientIp} -> {QueryIp}: invalid IPv4", clientIp, ipV4);
-        return Results.Problem(
-            detail: $"'{ipV4}' is not a valid IPv4 address.",
-            statusCode: StatusCodes.Status400BadRequest);
-    }
-
-    var result = svc.Lookup(ip);
-    var ua = ctx.Request.Headers.UserAgent.ToString();
-    logger.LogInformation("Lookup {ClientIp} -> {QueryIp}: {Country} {Area} {Isp} | UA: {UserAgent}",
-        clientIp, result.QueryIp, result.Country, result.Area, result.Isp, ua);
-    return Results.Ok(result);
-});
-
-// GET /db-info — return database file metadata
-app.MapGet("/db-info", (QqwryDbProvider db) =>
-{
-    var info = db.GetFileInfo();
-    return Results.Ok(new
-    {
-        fileName = Path.GetFileName(info.Path),
-        sizeMb = Math.Round(info.SizeBytes / 1024.0 / 1024.0, 2),
-        lastUpdatedUtc = info.LastUpdatedUtc
-    });
-});
+app.MapIpInfoEndpoints();
 
 app.Run();
 
