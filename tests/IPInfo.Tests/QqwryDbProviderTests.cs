@@ -57,4 +57,35 @@ public sealed class QqwryDbProviderTests
         Assert.Equal("United States", result.Country);
         Assert.Equal("Google LLC", result.Area);
     }
+
+    [Fact]
+    public void TryReload_KeepsCurrentDatabase_WhenFileIsTemporarilyMissing()
+    {
+        using var file = TestQqwryDatabase.WriteTempFile(
+            TestQqwryDatabase.CreateNormalDb("United States", "Google LLC", padToProviderMinimum: true));
+        var provider = new QqwryDbProvider(file.Path, NullLogger<QqwryDbProvider>.Instance);
+
+        File.Delete(file.Path);
+        provider.TryReload();
+
+        var result = provider.Query(IPAddress.Parse("1.1.1.8"));
+        Assert.True(provider.IsAvailable);
+        Assert.Equal("United States", result.Country);
+        Assert.Equal("Google LLC", result.Area);
+    }
+
+    [Fact]
+    public void TryReload_MarksDatabaseUnavailable_WhenFileStaysMissing()
+    {
+        using var file = TestQqwryDatabase.WriteTempFile(
+            TestQqwryDatabase.CreateNormalDb("United States", "Google LLC", padToProviderMinimum: true));
+        var provider = new QqwryDbProvider(file.Path, NullLogger<QqwryDbProvider>.Instance);
+
+        File.Delete(file.Path);
+        provider.TryReload();
+        provider.TryReload();
+        provider.TryReload();
+
+        Assert.False(provider.IsAvailable);
+    }
 }

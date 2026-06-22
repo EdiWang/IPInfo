@@ -14,11 +14,13 @@ public sealed class QqwryDbProvider
     private volatile QqwryDb? _current;
     private readonly string _path;
     private DateTime _lastWriteTime;
+    private int _missingReloadCount;
     private readonly ILogger<QqwryDbProvider> _logger;
 
     // A valid QQWry.dat is several MB; reject anything suspiciously small
     // to guard against reading a partially-written file.
     private const long MinValidFileSizeBytes = 1 * 1024 * 1024; // 1 MB
+    private const int MissingFileReloadsBeforeUnavailable = 3;
 
     public bool IsAvailable => _current is not null;
 
@@ -53,7 +55,21 @@ public sealed class QqwryDbProvider
         {
             if (_current is not null)
             {
-                _logger.LogWarning("QQWry database at {Path} was removed. IP lookup will be unavailable.", _path);
+                _missingReloadCount++;
+                if (_missingReloadCount < MissingFileReloadsBeforeUnavailable)
+                {
+                    _logger.LogWarning(
+                        "QQWry database at {Path} is not visible on reload attempt {Attempt}/{Threshold}. Keeping the current in-memory database.",
+                        _path,
+                        _missingReloadCount,
+                        MissingFileReloadsBeforeUnavailable);
+                    return;
+                }
+
+                _logger.LogWarning(
+                    "QQWry database at {Path} was missing for {MissingReloadCount} consecutive reload attempts. IP lookup will be unavailable.",
+                    _path,
+                    _missingReloadCount);
                 _current = null;
                 _lastWriteTime = DateTime.MinValue;
             }
@@ -62,6 +78,7 @@ public sealed class QqwryDbProvider
 
         if (fileState == DbFileState.Unreadable) return;
 
+        _missingReloadCount = 0;
         if (fileInfo is null) return;
         if (_current is not null && fileInfo.LastWriteTimeUtc == _lastWriteTime) return;
 
@@ -75,6 +92,7 @@ public sealed class QqwryDbProvider
         {
             _current = null;
             _lastWriteTime = DateTime.MinValue;
+            _missingReloadCount = 0;
             if (initialLoad)
             {
                 _logger.LogWarning(
@@ -103,6 +121,7 @@ public sealed class QqwryDbProvider
             var newDb = new QqwryDb(_path);
             Interlocked.Exchange(ref _current, newDb);
             _lastWriteTime = lastWriteTime;
+            _missingReloadCount = 0;
 
             if (!initialLoad)
             {
