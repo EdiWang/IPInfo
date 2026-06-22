@@ -34,7 +34,7 @@ public sealed class QqwryDbProvider
     public IpLocation Query(IPAddress ip)
     {
         var db = _current ?? throw new InvalidOperationException(
-            $"IP database not found at the configured path '{_path}'. Please check the configuration and ensure the database file exists.");
+            $"IP database not found or not accessible at the configured path '{_path}'. Please check the configuration, file permissions, and ensure the database file exists.");
         return db.Query(ip);
     }
 
@@ -96,7 +96,7 @@ public sealed class QqwryDbProvider
             if (initialLoad)
             {
                 _logger.LogWarning(
-                    "QQWry database not found at {Path}. IP lookup will be unavailable until the file is provided.",
+                    "QQWry database not found or not accessible at {Path}. IP lookup will be unavailable until the file is provided with readable permissions.",
                     _path);
             }
             return;

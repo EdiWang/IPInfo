@@ -22,7 +22,7 @@ public static class QqwryDbAvailabilityMiddlewareExtensions
                 {
                     var logger = ctx.RequestServices.GetRequiredService<ILogger<Program>>();
                     logger.LogError(
-                        "IP database not found at '{Path}'. Returning 503. Please check the configuration.",
+                        "IP database not found or not accessible at '{Path}'. Returning 503. Please check the configuration and file permissions.",
                         qqwryPath);
                 }
 
@@ -31,7 +31,7 @@ public static class QqwryDbAvailabilityMiddlewareExtensions
                     StatusCodes.Status503ServiceUnavailable,
                     "https://tools.ietf.org/html/rfc9110#section-15.6.1",
                     "IP Database Unavailable",
-                    $"IP database not found at the configured path '{qqwryPath}'. Please check the configuration and ensure the database file exists.");
+                    $"IP database not found or not accessible at the configured path '{qqwryPath}'. Please check the configuration, file permissions, and ensure the database file exists.");
                 return;
             }
 

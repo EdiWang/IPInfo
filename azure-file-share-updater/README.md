@@ -29,6 +29,10 @@ The script downloads into a temporary directory, validates that the file is not
 suspiciously small, copies it to a temp target in `DATA_DIR`, then uses `mv` to
 replace the live database atomically.
 
+The data directory is kept traversable by non-root containers, and generated
+database/metadata files are written as world-readable. The API image runs as a
+non-root user and needs read access to the mounted database file.
+
 It also writes:
 
 - `qqwry.dat.sha256`

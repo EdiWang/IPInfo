@@ -29,6 +29,7 @@ if [ ! -f "${COMPOSE_SOURCE}" ]; then
 fi
 
 mkdir -p "${DEPLOY_DIR}"
+chmod 0755 "${DEPLOY_DIR}"
 
 COMPOSE_SOURCE_PATH="$(realpath "${COMPOSE_SOURCE}")"
 COMPOSE_TARGET_PATH="$(realpath -m "${DEPLOY_DIR}/compose.yaml")"
@@ -52,6 +53,19 @@ if [ ! -s "${DEPLOY_DIR}/qqwry.dat" ]; then
     -v "${DEPLOY_DIR}:/data" \
     "${UPDATER_IMAGE}"
 fi
+
+if [ -e "${DEPLOY_DIR}/qqwry.dat" ]; then
+  chmod 0644 "${DEPLOY_DIR}/qqwry.dat"
+fi
+
+for metadata_file in \
+  "${DEPLOY_DIR}/qqwry.dat.sha256" \
+  "${DEPLOY_DIR}/qqwry.dat.updated_at" \
+  "${DEPLOY_DIR}/qqwry.dat.version"; do
+  if [ -e "${metadata_file}" ]; then
+    chmod 0644 "${metadata_file}"
+  fi
+done
 
 echo "Starting IPInfo stack..."
 docker compose up -d

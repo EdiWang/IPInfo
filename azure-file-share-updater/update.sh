@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 022
 
 # Fixed download URL (can also be overridden via environment variable)
 QQWRY_URL="${QQWRY_URL:-https://github.com/metowolf/qqwry.dat/releases/latest/download/qqwry.dat}"
@@ -10,6 +11,7 @@ USER_AGENT="${USER_AGENT:-qqwry-updater/1.0}"
 LOCK_FILE="${LOCK_FILE:-$DATA_DIR/.update.lock}"
 
 mkdir -p "$DATA_DIR"
+chmod 755 "$DATA_DIR"
 
 TARGET_PATH="$DATA_DIR/$TARGET_NAME"
 TMP_DIR="$(mktemp -d)"
@@ -57,9 +59,11 @@ TMP_TARGET="$DATA_DIR/.${TARGET_NAME}.tmp"
 cp -f "$RAW" "$TMP_TARGET"
 sync || true
 mv -f "$TMP_TARGET" "$TARGET_PATH"
+chmod 644 "$TARGET_PATH"
 
 date -u +'%Y-%m-%dT%H:%M:%SZ' > "$DATA_DIR/$TARGET_NAME.updated_at"
 echo "$NEW_SHA" > "$DATA_DIR/$TARGET_NAME.sha256"
 echo "${NEW_SHA:0:12}" > "$DATA_DIR/$TARGET_NAME.version"
+chmod 644 "$DATA_DIR/$TARGET_NAME.updated_at" "$DATA_DIR/$TARGET_NAME.sha256" "$DATA_DIR/$TARGET_NAME.version"
 
 log "Update done. replaced $TARGET_PATH"

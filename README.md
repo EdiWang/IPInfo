@@ -170,10 +170,13 @@ Tests use generated QQWry fixtures and do not require a real database file.
 
 ## Operations Notes
 
-- Missing or invalid database files return `HTTP 503` for normal API requests.
+- Missing, unreadable, or invalid database files return `HTTP 503` for normal
+  API requests.
 - If a previously loaded database briefly disappears during hot reload polling,
   the API keeps serving from the in-memory database for a few consecutive checks
   before marking the database unavailable.
+- In Docker Compose deployments, the updater keeps `qqwry.dat` readable by the
+  API container's non-root user.
 - `/health/live` stays available when the database is missing.
 - `/health/ready` returns unhealthy when the database is missing.
 - Lookup logs include client IP, query IP, location fields, and user agent.
