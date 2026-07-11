@@ -73,7 +73,7 @@ builder.Services.AddRateLimiter(options =>
     // Per-IP fixed-window limiter
     options.AddPolicy("per-ip", context =>
     {
-        var ip = ClientIpResolver.ResolveClientIpV4(context)?.ToString() ?? "unknown";
+        var ip = ClientIpResolver.ResolveClientIp(context)?.Address.ToString() ?? "unknown";
         return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = perIpPerSecond,

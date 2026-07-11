@@ -8,6 +8,21 @@ namespace IPInfo.Tests;
 public sealed class ClientIpResolverTests
 {
     [Fact]
+    public void ResolveClientIp_UsesLeftmostXForwardedForAddress()
+    {
+        var context = new DefaultHttpContext();
+        context.Request.Headers["X-Forwarded-For"] = "2001:db8::8, 10.0.0.1";
+        context.Connection.RemoteIpAddress = IPAddress.Parse("192.168.0.10");
+
+        var result = ClientIpResolver.ResolveClientIp(context);
+
+        Assert.NotNull(result);
+        Assert.Equal(IPAddress.Parse("2001:db8::8"), result.Address);
+        Assert.Null(result.IpV4);
+        Assert.Equal(IPAddress.Parse("2001:db8::8"), result.IpV6);
+    }
+
+    [Fact]
     public void ResolveClientIpV4_UsesLeftmostXForwardedForAddress()
     {
         var context = new DefaultHttpContext();
@@ -36,6 +51,17 @@ public sealed class ClientIpResolverTests
     {
         var context = new DefaultHttpContext();
         context.Connection.RemoteIpAddress = IPAddress.Parse("::ffff:192.168.0.10");
+
+        var result = ClientIpResolver.ResolveClientIpV4(context);
+
+        Assert.Equal(IPAddress.Parse("192.168.0.10"), result);
+    }
+
+    [Fact]
+    public void ResolveClientIpV4_MapsIpv4MappedIpv6XForwardedForAddress()
+    {
+        var context = new DefaultHttpContext();
+        context.Request.Headers["X-Forwarded-For"] = "::ffff:192.168.0.10";
 
         var result = ClientIpResolver.ResolveClientIpV4(context);
 

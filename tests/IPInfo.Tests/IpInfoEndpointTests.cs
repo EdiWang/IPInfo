@@ -44,6 +44,32 @@ public sealed class IpInfoEndpointTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(result);
         Assert.Equal("1.1.1.8", result.QueryIp);
+        Assert.Equal("1.1.1.8", result.ClientIpV4);
+        Assert.Null(result.ClientIpV6);
+    }
+
+    [Fact]
+    public async Task GetSelfIp_ReturnsIpv6WithoutLocation_WhenClientHasNoIpv4()
+    {
+        using var file = TestQqwryDatabase.WriteTempFile(
+            TestQqwryDatabase.CreateNormalDb("United States", "Google LLC", padToProviderMinimum: true));
+        using var factory = CreateFactory(file.Path);
+        using var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/");
+        request.Headers.TryAddWithoutValidation("X-Forwarded-For", "2001:db8::8");
+
+        var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+        var result = await response.Content.ReadFromJsonAsync<IpLocationResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(result);
+        Assert.Equal("2001:db8::8", result.QueryIp);
+        Assert.Null(result.ClientIpV4);
+        Assert.Equal("2001:db8::8", result.ClientIpV6);
+        Assert.Equal(string.Empty, result.Country);
+        Assert.Equal(string.Empty, result.Area);
+        Assert.Equal(string.Empty, result.Isp);
     }
 
     [Fact]
@@ -192,6 +218,8 @@ public sealed class IpInfoEndpointTests
     private sealed class IpLocationResponse
     {
         public string QueryIp { get; init; } = string.Empty;
+        public string? ClientIpV4 { get; init; }
+        public string? ClientIpV6 { get; init; }
         public string Country { get; init; } = string.Empty;
         public string Area { get; init; } = string.Empty;
         public string Isp { get; init; } = string.Empty;

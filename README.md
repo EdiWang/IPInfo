@@ -4,7 +4,8 @@ A lightweight ASP.NET Core minimal API that resolves IPv4 geolocation informatio
 
 ## Features
 
-- Look up geolocation (country, area, ISP) for the caller's own IP or any specific IPv4 address
+- Detect the caller's IPv4 or IPv6 address
+- Look up geolocation (country, area, ISP) for the caller's own IPv4 address or any specific IPv4 address
 - Supports reverse proxy environments via `X-Forwarded-For` header
 - Built-in rate limiting (per-IP and global)
 - Returns structured JSON responses with [RFC 7807](https://datatracker.ietf.org/doc/html/rfc7807) Problem Details on errors
@@ -16,8 +17,8 @@ A lightweight ASP.NET Core minimal API that resolves IPv4 geolocation informatio
 
 | Method | Path            | Description                          |
 |--------|-----------------|--------------------------------------|
-| GET    | `/`             | Look up the caller's own IP          |
-| GET    | `/ip`           | Look up the caller's own IP          |
+| GET    | `/`             | Detect the caller's IP and look up IPv4 geolocation |
+| GET    | `/ip`           | Detect the caller's IP and look up IPv4 geolocation |
 | GET    | `/ip/{ipV4}`    | Look up a specific IPv4 address      |
 | GET    | `/db-info`      | Return public database file metadata |
 | GET    | `/health/live`  | Process liveness check               |
@@ -28,9 +29,25 @@ A lightweight ASP.NET Core minimal API that resolves IPv4 geolocation informatio
 ```json
 {
   "queryIp": "8.8.8.8",
+  "clientIpV4": "8.8.8.8",
+  "clientIpV6": null,
   "country": "美国",
   "area": "",
   "isp": "Google LLC"
+}
+```
+
+When the caller is detected as IPv6-only, the API returns the IPv6 address with
+empty location fields because `qqwry.dat` is an IPv4 database:
+
+```json
+{
+  "queryIp": "2001:db8::8",
+  "clientIpV4": null,
+  "clientIpV6": "2001:db8::8",
+  "country": "",
+  "area": "",
+  "isp": ""
 }
 ```
 
@@ -67,17 +84,19 @@ the database is unavailable, it returns `HTTP 503`.
 
 When exceeded, the API returns `HTTP 429 Too Many Requests`.
 
-Per-IP limiting uses the same IPv4 resolution as lookup logging:
+Per-IP limiting uses the same client IP resolution as lookup logging:
 
-1. The leftmost `X-Forwarded-For` IPv4 address, when present and valid.
-2. The remote connection IP, including IPv4-mapped IPv6 addresses.
+1. The leftmost `X-Forwarded-For` IP address, when present and valid.
+2. The remote connection IP.
+
+IPv4-mapped IPv6 addresses are normalized to IPv4.
 
 ## Configuration
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `DBPath` | `/data/qqwry.dat` | Path to the local QQWry database file |
-| `RateLimiting:PerIpPerSecond` | `5` | Per-client IPv4 requests per second |
+| `RateLimiting:PerIpPerSecond` | `5` | Per-client IP requests per second |
 | `RateLimiting:GlobalPerSecond` | `10` | Global requests per second |
 | `IpDb:ReloadIntervalSeconds` | `60` | Database reload polling interval |
 

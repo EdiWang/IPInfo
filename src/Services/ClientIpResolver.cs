@@ -1,30 +1,39 @@
 using System.Net;
-using System.Net.Sockets;
 
 namespace IPInfo.Services;
 
 public static class ClientIpResolver
 {
-    public static IPAddress? ResolveClientIpV4(HttpContext context)
+    public static ClientIpResolution? ResolveClientIp(HttpContext context)
     {
         var xff = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
         if (!string.IsNullOrEmpty(xff))
         {
             var leftmost = xff.Split(',', StringSplitOptions.TrimEntries)[0];
-            if (IPAddress.TryParse(leftmost, out var parsed) && parsed.AddressFamily == AddressFamily.InterNetwork)
+            if (TryParseIpAddress(leftmost, out var parsed))
             {
-                return parsed;
+                return ClientIpResolution.From(parsed);
             }
         }
 
         var remote = context.Connection.RemoteIpAddress;
-        if (remote is null) return null;
+        return remote is null ? null : ClientIpResolution.From(remote);
+    }
 
-        if (remote.IsIPv4MappedToIPv6)
+    public static IPAddress? ResolveClientIpV4(HttpContext context)
+    {
+        return ResolveClientIp(context)?.IpV4;
+    }
+
+    private static bool TryParseIpAddress(string value, out IPAddress ipAddress)
+    {
+        if (!IPAddress.TryParse(value, out var parsed))
         {
-            remote = remote.MapToIPv4();
+            ipAddress = IPAddress.None;
+            return false;
         }
 
-        return remote.AddressFamily == AddressFamily.InterNetwork ? remote : null;
+        ipAddress = parsed;
+        return true;
     }
 }
