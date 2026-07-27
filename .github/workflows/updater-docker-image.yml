@@ -24,8 +24,8 @@ jobs:
       id: docker_build
       uses: docker/build-push-action@v7
       with:
-        context: ./azure-file-share-updater
-        file: ./azure-file-share-updater/Dockerfile
+        context: ./database-updater
+        file: ./database-updater/Dockerfile
         push: true
         tags: ediwang.azurecr.io/ipinfo-updater:latest
 

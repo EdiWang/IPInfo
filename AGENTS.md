@@ -53,7 +53,7 @@ Core behaviors:
 - `src/Services/ProblemDetailsResponse.cs` writes consistent
   `application/problem+json` responses for middleware-level failures.
 - `src/Models/IpLocationResult.cs` is the public response DTO.
-- `azure-file-share-updater/` contains a small Docker image/script for
+- `database-updater/` contains a small Docker image/script for
   downloading and atomically replacing `qqwry.dat`.
 - `compose.yaml` runs the API and updater together.
 - `deploy-vm.sh` copies the compose file to a VM deploy directory, pulls images,
@@ -152,7 +152,7 @@ Database reload polling can be configured with:
 ## Docker And Deployment Notes
 
 - `src/Dockerfile` builds the API image from the `src` context.
-- `azure-file-share-updater/Dockerfile` builds the updater image from the
+- `database-updater/Dockerfile` builds the updater image from the
   updater directory.
 - `compose.yaml` expects `/opt/docker/ip-info` on the host and mounts it to
   `/data`.
@@ -207,7 +207,7 @@ by the GitHub workflow:
 
 ```powershell
 docker build -f src\Dockerfile src
-docker build -f azure-file-share-updater\Dockerfile azure-file-share-updater
+docker build -f database-updater\Dockerfile database-updater
 ```
 
 ## Style Guidelines
