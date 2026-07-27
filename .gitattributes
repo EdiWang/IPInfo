@@ -5,6 +5,7 @@
 
 compose.yaml text eol=lf
 deploy-vm.sh text eol=lf
+database-updater/update.sh text eol=lf
 
 ###############################################################################
 # Set default behavior for command prompt diff.

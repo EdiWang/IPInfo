@@ -1,15 +1,16 @@
 # IPInfo
 
-A lightweight ASP.NET Core minimal API that resolves IPv4 geolocation information using the [QQWry](https://github.com/metowolf/qqwry.dat) IP database (`qqwry.dat`).
+A lightweight ASP.NET Core minimal API that resolves IPv4 geolocation information using one or more local IP databases.
 
 ## Features
 
 - Detect the caller's IPv4 or IPv6 address
 - Look up geolocation (country, area, ISP) for the caller's own IPv4 address or any specific IPv4 address
+- Supports configurable database providers, including QQWry and MaxMind GeoLite2 City
 - Supports reverse proxy environments via `X-Forwarded-For` header
 - Built-in rate limiting (per-IP and global)
 - Returns structured JSON responses with [RFC 7807](https://datatracker.ietf.org/doc/html/rfc7807) Problem Details on errors
-- Hot-reloads `qqwry.dat` automatically when the file changes on disk
+- Hot-reloads configured database files automatically when they change on disk
 - Liveness and database readiness health checks
 - Docker-ready
 
@@ -31,11 +32,15 @@ A lightweight ASP.NET Core minimal API that resolves IPv4 geolocation informatio
   "queryIp": "8.8.8.8",
   "clientIpV4": "8.8.8.8",
   "clientIpV6": null,
-  "country": "美国",
-  "area": "",
-  "isp": "Google LLC"
+  "country": ["美国", "United States"],
+  "area": ["", "California Mountain View"],
+  "isp": ["Google LLC", ""]
 }
 ```
+
+The `country`, `area`, and `isp` arrays contain one value per configured
+database provider, in configured order. The response intentionally does not
+include provider names or data-source labels.
 
 When the caller is detected as IPv6-only, the API returns the IPv6 address with
 empty location fields because `qqwry.dat` is an IPv4 database:
@@ -45,9 +50,9 @@ empty location fields because `qqwry.dat` is an IPv4 database:
   "queryIp": "2001:db8::8",
   "clientIpV4": null,
   "clientIpV6": "2001:db8::8",
-  "country": "",
-  "area": "",
-  "isp": ""
+  "country": [""],
+  "area": [""],
+  "isp": [""]
 }
 ```
 
@@ -55,14 +60,25 @@ empty location fields because `qqwry.dat` is an IPv4 database:
 
 ```json
 {
-  "fileName": "qqwry.dat",
-  "sizeMb": 10.42,
-  "lastUpdatedUtc": "2025-01-01T00:00:00Z"
+  "databases": [
+    {
+      "fileName": "qqwry.dat",
+      "sizeMb": 10.42,
+      "lastUpdatedUtc": "2025-01-01T00:00:00Z",
+      "available": true
+    },
+    {
+      "fileName": "GeoLite2-City.mmdb",
+      "sizeMb": 64.12,
+      "lastUpdatedUtc": "2025-01-01T00:00:00Z",
+      "available": true
+    }
+  ]
 }
 ```
 
 `/db-info` is public but does not expose the full configured database path. If
-the database is unavailable, it returns `HTTP 503`.
+all configured databases are unavailable, it returns `HTTP 503`.
 
 ### Error Response (RFC 7807)
 
@@ -95,7 +111,10 @@ IPv4-mapped IPv6 addresses are normalized to IPv4.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `DBPath` | `/data/qqwry.dat` | Path to the local QQWry database file |
+| `DBPath` | `/data/qqwry.dat` | Legacy path to the local QQWry database file, used when `IpDatabases:Providers` is not configured |
+| `IpDatabases:Providers:{n}:Type` | | Database provider type: `Qqwry` or `MaxMindGeoLite2City` |
+| `IpDatabases:Providers:{n}:Path` | | Local database file path for the provider |
+| `IpDatabases:Providers:{n}:Locale` | `zh-CN` | Preferred MaxMind localized name locale |
 | `RateLimiting:PerIpPerSecond` | `5` | Per-client IP requests per second |
 | `RateLimiting:GlobalPerSecond` | `10` | Global requests per second |
 | `IpDb:ReloadIntervalSeconds` | `60` | Database reload polling interval |
@@ -103,13 +122,33 @@ IPv4-mapped IPv6 addresses are normalized to IPv4.
 `IpDb:ReloadIntervalSeconds` must be positive. Invalid values fall back to the
 default interval and are logged as warnings.
 
+Example multi-provider configuration:
+
+```json
+{
+  "IpDatabases": {
+    "Providers": [
+      {
+        "Type": "Qqwry",
+        "Path": "/data/qqwry.dat"
+      },
+      {
+        "Type": "MaxMindGeoLite2City",
+        "Path": "/data/GeoLite2-City.mmdb",
+        "Locale": "zh-CN"
+      }
+    ]
+  }
+}
+```
+
 ## Health Checks
 
 `/health/live` reports whether the process can answer requests. It does not
 require the database.
 
-`/health/ready` requires `qqwry.dat` to be loaded and is used by Docker Compose
-and the VM deployment script.
+`/health/ready` requires all configured database providers to be loaded and is
+used by Docker Compose and the VM deployment script.
 
 ## Getting Started
 
@@ -117,6 +156,7 @@ and the VM deployment script.
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - A copy of `qqwry.dat` (available from [metowolf/qqwry.dat](https://github.com/metowolf/qqwry.dat))
+- Optional: a MaxMind GeoLite2 City `.mmdb` file and MaxMind license key for automated updates
 
 ### Run Locally
 
@@ -162,11 +202,15 @@ docker compose ps
 curl http://localhost:8000/health/ready
 ```
 
+`compose.yaml` enables QQWry and MaxMind GeoLite2 City. Set
+`MAXMIND_LICENSE_KEY` in the shell or environment file before running compose so
+the updater can download `GeoLite2-City.mmdb`.
+
 ### Deploy to a VM
 
 `deploy-vm.sh` copies `compose.yaml` into the deploy directory, pulls images,
-runs an initial database update if `qqwry.dat` is missing, starts the stack, and
-waits for `/health/ready`.
+runs an initial database update, starts the stack, and waits for
+`/health/ready`.
 
 ```bash
 ./deploy-vm.sh
@@ -190,14 +234,14 @@ Tests use generated QQWry fixtures and do not require a real database file.
 ## Operations Notes
 
 - Missing, unreadable, or invalid database files return `HTTP 503` for normal
-  API requests.
+  API requests when no configured provider is available.
 - If a previously loaded database briefly disappears during hot reload polling,
   the API keeps serving from the in-memory database for a few consecutive checks
   before marking the database unavailable.
-- In Docker Compose deployments, the updater keeps `qqwry.dat` readable by the
-  API container's non-root user.
+- In Docker Compose deployments, the updater keeps database files readable by
+  the API container's non-root user.
 - `/health/live` stays available when the database is missing.
-- `/health/ready` returns unhealthy when the database is missing.
+- `/health/ready` returns unhealthy when any configured database is missing.
 - Lookup logs include client IP, query IP, location fields, and user agent.
 - Do not commit real database files, deployment data, or registry credentials.
 

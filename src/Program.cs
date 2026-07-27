@@ -23,17 +23,38 @@ builder.Logging.AddSimpleConsole(options =>
     options.TimestampFormat = "yyyy-MM-dd HH:mm:ss ";
 });
 
-// ── QQWry.dat ────────────────────────────────────────────────────
-var qqwryPath = builder.Configuration.GetValue<string>("DBPath") ?? "/data/qqwry.dat";
+// ── IP Databases ─────────────────────────────────────────────────
+var ipDatabaseProviders = IpDatabaseOptions.GetProviders(builder.Configuration);
 
-builder.Services.AddSingleton(sp =>
-    new QqwryDbProvider(qqwryPath, sp.GetRequiredService<ILogger<QqwryDbProvider>>()));
-builder.Services.AddHostedService<QqwryDbWatcher>();
+builder.Services.AddSingleton<IReadOnlyList<IIpLocationProvider>>(sp =>
+{
+    return ipDatabaseProviders.Select<IpDatabaseProviderOptions, IIpLocationProvider>(provider =>
+    {
+        if (provider.Type.Equals(IpDatabaseProviderTypes.Qqwry, StringComparison.OrdinalIgnoreCase))
+        {
+            return new QqwryDbProvider(
+                provider.Path,
+                sp.GetRequiredService<ILogger<QqwryDbProvider>>());
+        }
+
+        if (provider.Type.Equals(IpDatabaseProviderTypes.MaxMindGeoLite2City, StringComparison.OrdinalIgnoreCase))
+        {
+            return new MaxMindGeoLite2CityProvider(
+                provider.Path,
+                provider.Locale,
+                sp.GetRequiredService<ILogger<MaxMindGeoLite2CityProvider>>());
+        }
+
+        throw new InvalidOperationException($"Unsupported IP database provider type '{provider.Type}'.");
+    }).ToArray();
+});
+builder.Services.AddSingleton<IpDatabaseProviderCollection>();
+builder.Services.AddHostedService<IpDatabaseWatcher>();
 builder.Services.AddSingleton<IpLookupService>();
 builder.Services.AddSingleton<DbAvailabilityLogState>();
 builder.Services.AddHealthChecks()
     .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: ["live"])
-    .AddCheck<QqwryDbHealthCheck>("qqwry-db", tags: ["ready"]);
+    .AddCheck<IpDatabaseHealthCheck>("ip-databases", tags: ["ready"]);
 
 // ── Forwarded Headers ────────────────────────────────────────────
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -90,7 +111,7 @@ var app = builder.Build();
 
 app.UseForwardedHeaders();
 app.UseRateLimiter();
-app.UseQqwryDbAvailabilityGate(qqwryPath);
+app.UseIpDatabaseAvailabilityGate();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {

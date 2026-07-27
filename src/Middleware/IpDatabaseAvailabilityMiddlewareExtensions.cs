@@ -2,9 +2,9 @@ using IPInfo.Services;
 
 namespace IPInfo.Middleware;
 
-public static class QqwryDbAvailabilityMiddlewareExtensions
+public static class IpDatabaseAvailabilityMiddlewareExtensions
 {
-    public static IApplicationBuilder UseQqwryDbAvailabilityGate(this IApplicationBuilder app, string qqwryPath)
+    public static IApplicationBuilder UseIpDatabaseAvailabilityGate(this IApplicationBuilder app)
     {
         return app.Use(async (ctx, next) =>
         {
@@ -14,16 +14,15 @@ public static class QqwryDbAvailabilityMiddlewareExtensions
                 return;
             }
 
-            var db = ctx.RequestServices.GetRequiredService<QqwryDbProvider>();
-            if (!db.IsAvailable)
+            var databases = ctx.RequestServices.GetRequiredService<IpDatabaseProviderCollection>();
+            if (!databases.HasAnyAvailable)
             {
                 var logState = ctx.RequestServices.GetRequiredService<DbAvailabilityLogState>();
                 if (logState.TryMarkUnavailable())
                 {
                     var logger = ctx.RequestServices.GetRequiredService<ILogger<Program>>();
                     logger.LogError(
-                        "IP database not found or not accessible at '{Path}'. Returning 503. Please check the configuration and file permissions.",
-                        qqwryPath);
+                        "No configured IP database is available. Returning 503. Please check the configuration, file permissions, and update logs.");
                 }
 
                 await ProblemDetailsResponse.WriteAsync(
@@ -31,7 +30,7 @@ public static class QqwryDbAvailabilityMiddlewareExtensions
                     StatusCodes.Status503ServiceUnavailable,
                     "https://tools.ietf.org/html/rfc9110#section-15.6.1",
                     "IP Database Unavailable",
-                    $"IP database not found or not accessible at the configured path '{qqwryPath}'. Please check the configuration, file permissions, and ensure the database file exists.");
+                    "No configured IP database is available. Please check the configuration, file permissions, and ensure at least one database file exists.");
                 return;
             }
 

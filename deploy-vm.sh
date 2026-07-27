@@ -45,23 +45,29 @@ cd "${DEPLOY_DIR}"
 echo "Pulling images from ACR..."
 docker compose pull
 
-if [ ! -s "${DEPLOY_DIR}/qqwry.dat" ]; then
-  echo "qqwry.dat not found; running one initial database update..."
-  docker run --rm \
-    -e DATA_DIR=/data \
-    -e TARGET_NAME=qqwry.dat \
-    -v "${DEPLOY_DIR}:/data" \
-    "${UPDATER_IMAGE}"
-fi
+echo "Running one initial database update..."
+docker run --rm \
+  -e DATA_DIR=/data \
+  -e DATABASES="${DATABASES:-qqwry,geolite2-city}" \
+  -e MAXMIND_LICENSE_KEY="${MAXMIND_LICENSE_KEY:-}" \
+  -v "${DEPLOY_DIR}:/data" \
+  "${UPDATER_IMAGE}" || true
 
-if [ -e "${DEPLOY_DIR}/qqwry.dat" ]; then
-  chmod 0644 "${DEPLOY_DIR}/qqwry.dat"
-fi
+for database_file in \
+  "${DEPLOY_DIR}/qqwry.dat" \
+  "${DEPLOY_DIR}/GeoLite2-City.mmdb"; do
+  if [ -e "${database_file}" ]; then
+    chmod 0644 "${database_file}"
+  fi
+done
 
 for metadata_file in \
   "${DEPLOY_DIR}/qqwry.dat.sha256" \
   "${DEPLOY_DIR}/qqwry.dat.updated_at" \
-  "${DEPLOY_DIR}/qqwry.dat.version"; do
+  "${DEPLOY_DIR}/qqwry.dat.version" \
+  "${DEPLOY_DIR}/GeoLite2-City.mmdb.sha256" \
+  "${DEPLOY_DIR}/GeoLite2-City.mmdb.updated_at" \
+  "${DEPLOY_DIR}/GeoLite2-City.mmdb.version"; do
   if [ -e "${metadata_file}" ]; then
     chmod 0644 "${metadata_file}"
   fi

@@ -2,7 +2,7 @@ using System.Net;
 
 namespace IPInfo.Services;
 
-public sealed class QqwryDbProvider
+internal sealed class QqwryDbProvider : IIpLocationProvider
 {
     private enum DbFileState
     {
@@ -44,8 +44,18 @@ public sealed class QqwryDbProvider
         return new DbFileInfo(
             Path: _path,
             SizeBytes: fi.Exists ? fi.Length : 0,
-            LastUpdatedUtc: _lastWriteTime
+            LastUpdatedUtc: _lastWriteTime,
+            IsAvailable: IsAvailable
         );
+    }
+
+    ProviderIpLocation IIpLocationProvider.Lookup(IPAddress ip)
+    {
+        var location = Query(ip);
+        return new ProviderIpLocation(
+            Country: location.Country,
+            Area: string.Empty,
+            Isp: location.Area);
     }
 
     internal void TryReload()
@@ -84,6 +94,8 @@ public sealed class QqwryDbProvider
 
         TryLoad(initialLoad: false);
     }
+
+    void IIpLocationProvider.TryReload() => TryReload();
 
     private void TryLoad(bool initialLoad)
     {
@@ -163,4 +175,4 @@ public sealed class QqwryDbProvider
     }
 }
 
-public record DbFileInfo(string Path, long SizeBytes, DateTime LastUpdatedUtc);
+public record DbFileInfo(string Path, long SizeBytes, DateTime LastUpdatedUtc, bool IsAvailable);

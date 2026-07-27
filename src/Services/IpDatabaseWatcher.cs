@@ -1,9 +1,9 @@
 namespace IPInfo.Services;
 
-public sealed class QqwryDbWatcher(
-    QqwryDbProvider provider,
+internal sealed class IpDatabaseWatcher(
+    IpDatabaseProviderCollection databases,
     IConfiguration configuration,
-    ILogger<QqwryDbWatcher> logger) : BackgroundService
+    ILogger<IpDatabaseWatcher> logger) : BackgroundService
 {
     private readonly TimeSpan _interval = IpDbReloadOptions.GetReloadInterval(configuration, logger);
 
@@ -14,11 +14,11 @@ public sealed class QqwryDbWatcher(
         {
             try
             {
-                provider.TryReload();
+                databases.TryReloadAll(logger);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to reload QQWry database.");
+                logger.LogError(ex, "Failed to reload configured IP databases.");
             }
         }
     }

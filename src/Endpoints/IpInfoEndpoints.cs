@@ -17,14 +17,17 @@ public static class IpInfoEndpoints
         ipGroup.Map("/ip", HandleSelfLookup);
         ipGroup.MapGet("/ip/{ipV4}", HandleSpecificLookup);
 
-        app.MapGet("/db-info", (QqwryDbProvider db) =>
+        app.MapGet("/db-info", (IpDatabaseProviderCollection databases) =>
         {
-            var info = db.GetFileInfo();
             return Results.Ok(new
             {
-                fileName = Path.GetFileName(info.Path),
-                sizeMb = Math.Round(info.SizeBytes / 1024.0 / 1024.0, 2),
-                lastUpdatedUtc = info.LastUpdatedUtc
+                databases = databases.GetFileInfos().Select(info => new
+                {
+                    fileName = Path.GetFileName(info.Path),
+                    sizeMb = Math.Round(info.SizeBytes / 1024.0 / 1024.0, 2),
+                    lastUpdatedUtc = info.LastUpdatedUtc,
+                    available = info.IsAvailable
+                })
             });
         });
     }
@@ -43,21 +46,18 @@ public static class IpInfoEndpoints
         if (clientIpInfo.IpV4 is null)
         {
             logger.LogInformation("Lookup {ClientIp} -> self: IPv6 detected without IPv4", clientIpInfo.Address);
-            return Results.Ok(new IpLocationResult
-            {
-                QueryIp = clientIpInfo.Address.ToString(),
-                ClientIpV4 = null,
-                ClientIpV6 = clientIpInfo.IpV6?.ToString(),
-                Country = string.Empty,
-                Area = string.Empty,
-                Isp = string.Empty
-            });
+            return Results.Ok(svc.CreateEmptyResult(clientIpInfo.Address.ToString(), clientIpInfo));
         }
 
         var result = svc.Lookup(clientIpInfo.IpV4, clientIpInfo);
         var ua = ctx.Request.Headers.UserAgent.ToString();
         logger.LogInformation("Lookup {ClientIp} -> {QueryIp}: {Country} {Area} {Isp} | UA: {UserAgent}",
-            clientIpInfo.Address, result.QueryIp, result.Country, result.Area, result.Isp, ua);
+            clientIpInfo.Address,
+            result.QueryIp,
+            string.Join(" | ", result.Country),
+            string.Join(" | ", result.Area),
+            string.Join(" | ", result.Isp),
+            ua);
         return Results.Ok(result);
     }
 
@@ -81,7 +81,12 @@ public static class IpInfoEndpoints
         var result = svc.Lookup(ip, clientIp);
         var ua = ctx.Request.Headers.UserAgent.ToString();
         logger.LogInformation("Lookup {ClientIp} -> {QueryIp}: {Country} {Area} {Isp} | UA: {UserAgent}",
-            clientIpLogValue, result.QueryIp, result.Country, result.Area, result.Isp, ua);
+            clientIpLogValue,
+            result.QueryIp,
+            string.Join(" | ", result.Country),
+            string.Join(" | ", result.Area),
+            string.Join(" | ", result.Isp),
+            ua);
         return Results.Ok(result);
     }
 }

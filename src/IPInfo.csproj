@@ -9,4 +9,7 @@
 	<ItemGroup>
 		<InternalsVisibleTo Include="IPInfo.Tests" />
 	</ItemGroup>
+	<ItemGroup>
+	  <PackageReference Include="MaxMind.GeoIP2" Version="6.1.0" />
+	</ItemGroup>
 </Project>

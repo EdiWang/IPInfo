@@ -10,6 +10,11 @@ services:
     environment:
       ASPNETCORE_URLS: http://+:8080
       DBPath: /data/qqwry.dat
+      IpDatabases__Providers__0__Type: Qqwry
+      IpDatabases__Providers__0__Path: /data/qqwry.dat
+      IpDatabases__Providers__1__Type: MaxMindGeoLite2City
+      IpDatabases__Providers__1__Path: /data/GeoLite2-City.mmdb
+      IpDatabases__Providers__1__Locale: zh-CN
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health/ready >/dev/null || exit 1"]
       interval: 30s
@@ -28,7 +33,8 @@ services:
     restart: unless-stopped
     environment:
       DATA_DIR: /data
-      TARGET_NAME: qqwry.dat
+      DATABASES: qqwry,geolite2-city
+      MAXMIND_LICENSE_KEY: ${MAXMIND_LICENSE_KEY:-}
       SCHEDULE_TIME: "03:00"
     volumes:
       - type: bind
@@ -61,10 +67,8 @@ services:
           fi
         }
 
-        if [ ! -s "/data/qqwry.dat" ]; then
-          log "/data/qqwry.dat not found; running initial update."
-          run_update || true
-        fi
+        log "Running initial database update."
+        run_update || true
 
         while true; do
           now="$$(date +%s)"
